@@ -18,6 +18,11 @@ h1{font-size:13px;font-weight:600;letter-spacing:2px;text-transform:uppercase;co
 canvas{display:block;width:100%;touch-action:none;cursor:crosshair}
 #leg{display:flex;gap:10px;padding:5px 10px;font-size:10px;color:#444;background:#141414;flex-wrap:wrap;border-top:1px solid #1e1e1e}
 .li{display:flex;align-items:center;gap:3px}
+#notes-wrap{width:100%;max-width:820px;display:flex;flex-direction:column;gap:4px}
+#notes-wrap label{font-size:11px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:#555}
+#notes{width:100%;min-height:72px;resize:vertical;background:#141414;color:#ccc;border:1px solid #222;border-radius:6px;padding:8px 10px;font-size:13px;font-family:inherit;line-height:1.45}
+#notes:focus{outline:none;border-color:#185FA5}
+#notes::placeholder{color:#444}
 #modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:100;align-items:center;justify-content:center;padding:12px}
 #modal.open{display:flex}
 #modal .box{background:#181818;border:1px solid #222;border-radius:6px;width:100%;max-width:360px;max-height:75vh;display:flex;flex-direction:column;overflow:hidden}
@@ -96,6 +101,11 @@ canvas{display:block;width:100%;touch-action:none;cursor:crosshair}
     <div class="li"><svg width="13" height="13"><circle cx="6" cy="6" r="5" fill="#A32D2D"/></svg> Defense drag</div>
     <div class="li" style="margin-left:auto;color:#333">drag players · draw routes · save PNG</div>
   </div>
+</div>
+
+<div id="notes-wrap">
+  <label for="notes">Notes</label>
+  <textarea id="notes" placeholder="Play notes, coaching points, reads…"></textarea>
 </div>
 
 <div id="modal"><div class="box">
@@ -422,9 +432,7 @@ document.getElementById('btn-undo').addEventListener('click',function(){
   if(hist.length){var s=hist.pop();players=JSON.parse(s.p);routes=JSON.parse(s.r);render();}
 });
 document.getElementById('btn-clear').addEventListener('click',function(){saveH();routes=[];render();});
-document.getElementById('btn-save').addEventListener('click',function(){
-  var a=document.createElement('a');a.download='play.png';a.href=C.toDataURL();a.click();
-});
+document.getElementById('btn-save').addEventListener('click',function(){exportPNG();});
 
 function gp(e){
   var r=C.getBoundingClientRect(),s=e.touches?e.touches[0]:e;
@@ -507,7 +515,7 @@ function savePlay(){
   for(var i=0;i<plays.length;i++){if(plays[i].name===name){idx=i;break;}}
   if(idx<0&&plays.length>=MAXPLAYS){alert('Maximum of '+MAXPLAYS+' saved plays reached. Delete one first.');return;}
   if(idx>=0&&!confirm('A play named "'+name+'" already exists. Overwrite it?'))return;
-  var play={name:name,ts:Date.now(),ballX:ballX,players:players,routes:routes};
+  var play={name:name,ts:Date.now(),ballX:ballX,players:players,routes:routes,notes:notesEl.value};
   if(idx>=0)plays[idx]=play;else plays.push(play);
   setPlays(plays);
 }
@@ -517,6 +525,8 @@ function loadPlay(p){
   if(typeof p.ballX==='number')ballX=p.ballX;
   players=JSON.parse(JSON.stringify(p.players||[]));
   routes=JSON.parse(JSON.stringify(p.routes||[]));
+  notesEl.value=p.notes||'';
+  try{localStorage.setItem(NKEY,notesEl.value);}catch(e){}
   render();
   closeModal();
 }
@@ -553,6 +563,46 @@ document.getElementById('btn-saveplay').addEventListener('click',savePlay);
 document.getElementById('btn-loadplay').addEventListener('click',openModal);
 document.getElementById('modal-close').addEventListener('click',closeModal);
 document.getElementById('modal').addEventListener('click',function(e){if(e.target===this)closeModal();});
+
+/* ---- Notes: persist locally + bake into the saved PNG ---- */
+var NKEY='cpd_notes',notesEl=document.getElementById('notes');
+notesEl.value=localStorage.getItem(NKEY)||'';
+notesEl.addEventListener('input',function(){try{localStorage.setItem(NKEY,notesEl.value);}catch(e){}});
+
+function exportPNG(){
+  var notes=notesEl.value.replace(/\s+$/,'');
+  var pad=16;
+  var bodySize=Math.max(12,Math.round(C.width/58));
+  var hdrSize=Math.max(10,Math.round(C.width/75));
+  var lineH=Math.round(bodySize*1.45);
+  var off=document.createElement('canvas'),octx=off.getContext('2d');
+  var maxW=C.width-pad*2,lines=[];
+  if(notes){
+    octx.font=bodySize+'px sans-serif';
+    notes.split('\n').forEach(function(para){
+      if(!para){lines.push('');return;}
+      var words=para.split(' '),cur='';
+      words.forEach(function(w){
+        var test=cur?cur+' '+w:w;
+        if(octx.measureText(test).width>maxW&&cur){lines.push(cur);cur=w;}else cur=test;
+      });
+      lines.push(cur);
+    });
+  }
+  var notesH=notes?(pad+lineH+lines.length*lineH+pad):0;
+  off.width=C.width;off.height=C.height+notesH;
+  octx.fillStyle='#0f0f0f';octx.fillRect(0,0,off.width,off.height);
+  octx.drawImage(C,0,0);
+  if(notes){
+    var y=C.height+pad;
+    octx.textAlign='left';octx.textBaseline='top';
+    octx.fillStyle='#888';octx.font='bold '+hdrSize+'px sans-serif';
+    octx.fillText('NOTES',pad,y);y+=lineH;
+    octx.fillStyle='#eee';octx.font=bodySize+'px sans-serif';
+    lines.forEach(function(ln){octx.fillText(ln,pad,y);y+=lineH;});
+  }
+  var a=document.createElement('a');a.download='play.png';a.href=off.toDataURL();a.click();
+}
 </script>
 </body>
 </html>
