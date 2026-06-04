@@ -59,8 +59,8 @@ canvas{display:block;width:100%;touch-action:none;cursor:crosshair}
         <option value="gun_3x1">Gun 3x1</option>
         <option value="gun_3x1_te">Gun 3x1 TE on line</option>
         <option value="gun_3x1_yoff">Gun 3x1 Y-off / sniffer</option>
-        <option value="gun_3x1_back">Gun 3x1 backs both sides</option>
-        <option value="gun_2x2_back">Gun 2x2 backs both sides</option>
+        <option value="gun_3x1_back">Gun Slot, Split Backs</option>
+        <option value="gun_2x2_back">Gun Split Backs (2 WR, TE)</option>
         <option value="gun_empty">Gun Empty</option>
       </optgroup>
       <optgroup label="Ace / Singleback">
@@ -70,7 +70,7 @@ canvas{display:block;width:100%;touch-action:none;cursor:crosshair}
       </optgroup>
       <optgroup label="Under Center">
         <option value="i_form">I-Formation</option>
-        <option value="i_form_trips">I-Form Trips</option>
+        <option value="i_form_trips">I-Form Twins</option>
         <option value="pro_form">Pro Formation</option>
         <option value="pistol_2x2">Pistol 2x2</option>
       </optgroup>
@@ -101,6 +101,7 @@ canvas{display:block;width:100%;touch-action:none;cursor:crosshair}
       <option value="2">Cover 2</option>
       <option value="3">Cover 3</option>
       <option value="4">Cover 4</option>
+      <option value="palm">Cover 4 Palms</option>
     </select>
     <button id="btn-addzone">+ Zone</button>
     <label>Show:</label>
@@ -312,7 +313,7 @@ var F={
   gun_2x2_yoff:function(){return OL().concat([
     mk(SL_WR,LOS,'X','circle',O),mk(W-SL_WR,LOS,'Z','circle',O),
     mk(ballX-OL_G-OL_T-SLOT(),LOS+8,'H','circle',O),
-    mk(ballX+OL_G+OL_T+Math.round(3*YD),LOS+30,'Y','circle',O),
+    mk(ballX+OL_G+OL_T+Math.round(R()*1.5),LOS+Math.round(2*YD_V),'Y','circle',O),
     mk(ballX,QB_Y,'QB','circle',Q),mk(ballX-18,RB_Y,'RB','circle',O),
   ]);},
   gun_3x1:function(){return OL().concat([
@@ -333,21 +334,19 @@ var F={
     mk(SL_WR,LOS,'X','circle',O),
     mk(W-SL_WR,LOS,'Z','circle',O),
     mk(W-SL_WR-Math.round(4*YD),LOS,'H','circle',O),
-    mk(ballX+OL_G+OL_T+Math.round(3*YD),LOS+30,'Y','circle',O),
+    mk(ballX+OL_G+OL_T+Math.round(R()*1.5),LOS+Math.round(2*YD_V),'Y','circle',O),
     mk(ballX,QB_Y,'QB','circle',Q),mk(ballX-18,RB_Y,'RB','circle',O),
   ]);},
   gun_3x1_back:function(){return OL().concat([
     mk(SL_WR,LOS,'X','circle',O),
     mk(W-SL_WR,LOS,'Z','circle',O),
-    mk(W-SL_WR-Math.round(4*YD),LOS,'Y','circle',O),
-    mk(W-SL_WR-Math.round(8*YD),LOS+8,'H','circle',O),
+    mk(W-SL_WR-Math.round(4*YD),LOS+8,'H','circle',O),
     mk(ballX,QB_Y,'QB','circle',Q),
     mk(ballX-28,RB_Y,'RB','circle',O),mk(ballX+28,RB_Y,'FB','circle',O),
   ]);},
   gun_2x2_back:function(){return OL().concat([
     mk(SL_WR,LOS,'X','circle',O),mk(W-SL_WR,LOS,'Z','circle',O),
-    mk(ballX-OL_G-OL_T-SLOT(),LOS+8,'H','circle',O),
-    mk(ballX+OL_G+OL_T+SLOT(),LOS+8,'Y','circle',O),
+    mk(ballX+OL_G+OL_T+OL_T,LOS,'Y','circle',O),
     mk(ballX,QB_Y,'QB','circle',Q),
     mk(ballX-28,RB_Y,'RB','circle',O),mk(ballX+28,RB_Y,'FB','circle',O),
   ]);},
@@ -386,7 +385,6 @@ var F={
   ]);},
   i_form_trips:function(){return OL().concat([
     mk(SL_WR,LOS,'X','circle',O),
-    mk(ballX+OL_G+OL_T+OL_T,LOS,'Y','circle',O),
     mk(W-SL_WR,LOS,'Z','circle',O),
     mk(W-SL_WR-Math.round(4*YD),LOS,'H','circle',O),
     mk(ballX,LOS+18,'QB','circle',Q),
@@ -654,8 +652,9 @@ function clearPlayerAssigns(pid){assigns=assigns.filter(function(a){return a.pid
 function isStacker(p){return !!p&&(p.label==='MIKE'||p.label==='WILL');}
 var RUNFIT=['A gap','B gap','C gap','D gap','Force','Contain','Spill','Fill','Cutback','Box/Alley','Custom…'];
 var PASSRUSH=['Contain','A rush','B rush','C rush','Slant ←','Slant →','Loop ←','Loop →','TEX — DE in / DT contain','ET — DT in / DE contain','Twist — DTs cross','Custom…'];
-var COVERAGE=['Deep ⅓','Deep ½','Deep ¼','Deep MOF','Flat','Curl/Flat','Hook/Curl','Hook','Seam/Wall','Man','Spy','Robber','Blitz','Custom…'];
+var COVERAGE=['Deep ⅓','Deep ½','Deep ¼','Deep MOF','Flat','Curl/Flat','Hook/Curl','Hook','Seam/Wall','Wall 2','Match 3','Man','Spy','Robber','Blitz','Custom…'];
 var STUNTS={'TEX — DE in / DT contain':1,'ET — DT in / DE contain':1,'Twist — DTs cross':1};
+var ZONECOV={'Deep ⅓':1,'Deep ½':1,'Deep ¼':1,'Deep MOF':1,'Flat':1,'Curl/Flat':1,'Hook/Curl':1,'Hook':1,'Seam/Wall':1,'Wall 2':1,'Match 3':1};
 
 function playerById(id){for(var i=0;i<players.length;i++){if(players[i].id===id)return players[i];}return null;}
 function defByLabel(lb){return players.filter(function(p){return p.color===D&&p.label===lb;});}
@@ -687,7 +686,9 @@ function targetForRole(p,role){
     'Seam/Wall':{x:p.x,y:L-Math.round(9*YD_V)},
     'Man':manT,'Spy':{x:p.x,y:L-Math.round(4*YD_V)},
     'Robber':{x:ballX,y:L-Math.round(6*YD_V)},
-    'Blitz':{x:ballX+s*Ag,y:L}
+    'Blitz':{x:ballX+s*Ag,y:L},
+    'Wall 2':{x:p.x+s*Math.round(2*YD),y:L-Math.round(5*YD_V)},
+    'Match 3':{x:ballX,y:L-Math.round(5*YD_V)}
   };
   return m[role]||{x:p.x,y:L-Math.round(5*YD_V)};
 }
@@ -718,6 +719,15 @@ function drawTag(x,y,text,col){
 function drawAssign(a){
   var p=playerById(a.pid);if(!p)return;
   var col=kindCol(a.kind);
+  if(a.shape==='circle'){
+    ctx.save();
+    ctx.beginPath();ctx.ellipse(a.tx,a.ty,a.rx||Math.round(W*0.07),a.ry||Math.round(4*YD_V),0,0,Math.PI*2);
+    ctx.strokeStyle=col;ctx.lineWidth=2;ctx.setLineDash([5,4]);ctx.stroke();ctx.setLineDash([]);
+    ctx.fillStyle=col;ctx.font='bold '+Math.max(9,Math.round(W/88))+'px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.fillText(a.role,a.tx,a.ty);
+    ctx.restore();
+    return;
+  }
   if(a.curve)drawCurvedArrow(p.x,p.y,a.tx,a.ty,col);
   else drawArrow(p.x,p.y,a.tx,a.ty,col);
   drawTag(a.tx,a.ty,a.role,col);
@@ -736,8 +746,9 @@ function drawZone(z){
 
 function hitAssignHead(x,y){for(var i=assigns.length-1;i>=0;i--){if(Math.hypot(x-assigns[i].tx,y-assigns[i].ty)<15)return i;}return -1;}
 function hitAssign(x,y){
-  for(var i=assigns.length-1;i>=0;i--){var p=playerById(assigns[i].pid);if(!p)continue;
-    var dx=assigns[i].tx-p.x,dy=assigns[i].ty-p.y,len=Math.hypot(dx,dy);if(len<1)continue;
+  for(var i=assigns.length-1;i>=0;i--){var a=assigns[i],p=playerById(a.pid);if(!p)continue;
+    if(a.shape==='circle'){var ex=(x-a.tx)/(a.rx||30),ey=(y-a.ty)/(a.ry||20);if(ex*ex+ey*ey<=1.15)return i;continue;}
+    var dx=a.tx-p.x,dy=a.ty-p.y,len=Math.hypot(dx,dy);if(len<1)continue;
     var t=Math.max(0,Math.min(1,((x-p.x)*dx+(y-p.y)*dy)/(len*len)));
     if(Math.hypot(x-p.x-t*dx,y-p.y-t*dy)<11)return i;
   }return -1;
@@ -750,7 +761,9 @@ function addAssign(pi,role){
   if(isStacker(p)){if(tool!=='runfit')clearSlot(p.id,'pass');}
   else clearPlayerAssigns(p.id);
   var t=targetForRole(p,role);
-  assigns.push({pid:p.id,kind:tool,role:role,tx:Math.round(t.x),ty:Math.round(t.y),curve:!!t.curve});
+  var a={pid:p.id,kind:tool,role:role,tx:Math.round(t.x),ty:Math.round(t.y),curve:!!t.curve};
+  if(tool==='coverage'&&ZONECOV[role]){a.shape='circle';a.rx=Math.round(W*0.07);a.ry=Math.round(4*YD_V);}
+  assigns.push(a);
   closeMenu();render();
 }
 function addStunt(pi,stunt){
@@ -796,7 +809,24 @@ function closeMenu(){ctxMenu.classList.remove('open');}
 function setTool(t){tool=t;closeMenu();document.querySelectorAll('#tb button').forEach(function(b){b.classList.remove('act');});var btn=document.getElementById('t-'+t);if(btn)btn.classList.add('act');}
 document.getElementById('sel-view').addEventListener('change',function(){view=this.value;render();});
 document.getElementById('btn-addzone').addEventListener('click',function(){saveH();zones.push({x:Math.round(W/2),y:Math.round(LOS-Math.round(8*YD_V)),rx:Math.round(W*0.1),ry:Math.round(5*YD_V),label:'Zone'});if(view==='run'){view='both';document.getElementById('sel-view').value='both';}setTool('coverage');render();});
-C.addEventListener('dblclick',function(e){var pos=gp(e);var zi=hitZone(pos.x,pos.y);if(zi>=0){var nv=prompt('Zone label:',zones[zi].label);if(nv!==null){saveH();zones[zi].label=nv;render();}}});
+function openAssignEdit(ai){
+  var a=assigns[ai];
+  ctxMenu.innerHTML='';
+  var ttl=document.createElement('div');ttl.className='ttl';ttl.textContent='Edit · '+a.role;ctxMenu.appendChild(ttl);
+  function item(label,fn){var b=document.createElement('button');b.textContent=label;b.addEventListener('click',function(ev){ev.stopPropagation();fn();closeMenu();render();});ctxMenu.appendChild(b);}
+  item('Rename…',function(){var v=prompt('Label:',a.role);if(v!==null){v=v.trim();if(v){saveH();a.role=v;}}});
+  item(a.shape==='circle'?'Remove circle (→ arrow)':'Add circle',function(){saveH();if(a.shape==='circle'){a.shape='arrow';}else{a.shape='circle';a.rx=a.rx||Math.round(W*0.07);a.ry=a.ry||Math.round(4*YD_V);}});
+  item('Delete',function(){saveH();assigns.splice(ai,1);});
+  ctxMenu.style.left=Math.max(4,Math.min(lastClient.x,window.innerWidth-180))+'px';
+  ctxMenu.style.top=Math.max(4,Math.min(lastClient.y,window.innerHeight-200))+'px';
+  ctxMenu.classList.add('open');
+}
+C.addEventListener('dblclick',function(e){
+  lastClient={x:e.clientX,y:e.clientY};
+  var pos=gp(e);
+  var ai=hitAssign(pos.x,pos.y);if(ai>=0){openAssignEdit(ai);return;}
+  var zi=hitZone(pos.x,pos.y);if(zi>=0){var nv=prompt('Zone label:',zones[zi].label);if(nv!==null){saveH();zones[zi].label=nv;render();}}
+});
 document.addEventListener('mousedown',function(e){if(ctxMenu.classList.contains('open')&&!ctxMenu.contains(e.target)&&e.target!==C)closeMenu();});
 
 document.getElementById('sel-cov').addEventListener('change',function(){applyCoverage(this.value);this.value='';});
@@ -840,6 +870,14 @@ function applyCoverage(scheme){
     var q4=Math.round(W*0.1);
     Z(W*0.14,dy,q4,DRy,'Deep ¼');Z(W*0.38,dy,q4,DRy,'Deep ¼');Z(W*0.62,dy,q4,DRy,'Deep ¼');Z(W*0.86,dy,q4,DRy,'Deep ¼');
     Z(W*0.3,uy,URx,URy,'Curl');Z(W*0.5,uy,URx,URy,'Hook');Z(W*0.7,uy,URx,URy,'Curl');
+  }else if(scheme==='palm'){
+    var qy=LOS-Math.round(12*YD_V),cy=LOS-Math.round(7*YD_V),pq=Math.round(W*0.1);
+    P(cbs[0],W*0.15,cy);P(cbs[1],W*0.85,cy);
+    P(fs,W*0.35,qy);P(ss,W*0.65,qy);
+    P(will,W*0.33,uy);P(mike,W*0.5,uy);P(nick,W*0.67,uy);
+    Z(W*0.35,qy,pq,DRy,'Deep ¼');Z(W*0.65,qy,pq,DRy,'Deep ¼');
+    Z(W*0.15,cy,URx,URy,'Wall 2');Z(W*0.85,cy,URx,URy,'Wall 2');
+    Z(W*0.33,uy,URx,URy,'Hook/Curl');Z(W*0.5,uy,URx,URy,'Match 3');Z(W*0.67,uy,URx,URy,'Hook/Curl');
   }else if(scheme==='1'){
     P(fs,W*0.5,dy);Z(W*0.5,dy,Math.round(W*0.22),DRy,'Post / MOF');
     manAlign([ss,nick,will,mike]);
