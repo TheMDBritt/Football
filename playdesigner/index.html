@@ -650,6 +650,8 @@ var RFCOL='#e23b3b',PRCOL='#101010',CVCOL='#f5f5f5';
 function kindCol(k){return k==='runfit'?RFCOL:k==='passrush'?PRCOL:CVCOL;}
 function slotOf(k){return k==='runfit'?'run':'pass';}
 function clearSlot(pid,slot){assigns=assigns.filter(function(a){return !(a.pid===pid&&slotOf(a.kind)===slot);});}
+function clearPlayerAssigns(pid){assigns=assigns.filter(function(a){return a.pid!==pid;});}
+function isStacker(p){return !!p&&(p.label==='MIKE'||p.label==='WILL');}
 var RUNFIT=['A gap','B gap','C gap','D gap','Force','Contain','Spill','Fill','Cutback','Box/Alley','Custom…'];
 var PASSRUSH=['Contain','A rush','B rush','C rush','Slant ←','Slant →','Loop ←','Loop →','TEX — DE in / DT contain','ET — DT in / DE contain','Twist — DTs cross','Custom…'];
 var COVERAGE=['Deep ⅓','Deep ½','Deep ¼','Deep MOF','Flat','Curl/Flat','Hook/Curl','Hook','Seam/Wall','Man','Spy','Robber','Blitz','Custom…'];
@@ -745,8 +747,8 @@ function hitZone(x,y){for(var i=zones.length-1;i>=0;i--){if(zoneVal(zones[i],x,y
 
 function addAssign(pi,role){
   var p=players[pi];saveH();
-  var stack=(tool==='runfit'&&(p.label==='MIKE'||p.label==='WILL'));
-  if(!stack)clearSlot(p.id,slotOf(tool));
+  if(isStacker(p)){if(tool!=='runfit')clearSlot(p.id,'pass');}
+  else clearPlayerAssigns(p.id);
   var t=targetForRole(p,role);
   assigns.push({pid:p.id,kind:tool,role:role,tx:Math.round(t.x),ty:Math.round(t.y),curve:!!t.curve});
   closeMenu();render();
@@ -758,7 +760,7 @@ function addStunt(pi,stunt){
   var Dg=OL_G+OL_T+r*3.2;
   var inside={x:Math.round(ballX+s*OL_G*0.5),y:LOS};
   var contain={x:Math.round(ballX+s*(Dg+r*2)),y:Math.round(LOS-1.5*YD_V)};
-  function push(p,role,t,curve){if(p){clearSlot(p.id,'pass');assigns.push({pid:p.id,kind:'passrush',role:role,tx:t.x,ty:t.y,curve:curve});}}
+  function push(p,role,t,curve){if(p){if(isStacker(p))clearSlot(p.id,'pass');else clearPlayerAssigns(p.id);assigns.push({pid:p.id,kind:'passrush',role:role,tx:t.x,ty:t.y,curve:curve});}}
   if(stunt.indexOf('TEX')===0){
     var dt=pickDT(),de=pickDE();if(!dt||!de)return;saveH();
     push(de,'crash',inside,false);push(dt,'contain',contain,true);
