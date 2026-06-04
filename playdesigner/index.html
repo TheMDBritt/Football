@@ -6,16 +6,16 @@
 <title>Coach's Play Designer</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;font-family:'Segoe UI',sans-serif}
-body{background:#0f0f0f;color:#eee;height:100vh;overflow:hidden;display:flex;flex-direction:column;align-items:center;padding:6px;gap:6px}
+body{background:#0f0f0f;color:#eee;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:10px;gap:8px}
 h1{font-size:13px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:#555}
-#wrap{width:100%;flex:1 1 auto;min-height:0;display:flex;flex-direction:column;border:1px solid #222;border-radius:6px;overflow:hidden}
+#wrap{width:100%;max-width:820px;border:1px solid #222;border-radius:6px;overflow:hidden}
 #tb{display:flex;flex-wrap:wrap;gap:5px;padding:7px 8px;background:#181818;align-items:center;border-bottom:1px solid #222}
 #tb select,#tb button{font-size:11px;padding:4px 9px;border-radius:4px;border:1px solid #333;background:#222;color:#ccc;cursor:pointer}
 #tb button:hover{background:#2a2a2a}
 #tb button.act{background:#185FA5;color:#fff;border-color:#185FA5}
 #tb .sep{width:1px;height:20px;background:#333;margin:0 2px;flex-shrink:0}
 #tb label{font-size:11px;color:#555;white-space:nowrap}
-canvas{display:block;flex:1 1 auto;width:100%;min-height:0;touch-action:none;cursor:crosshair}
+canvas{display:block;width:100%;touch-action:none;cursor:crosshair}
 #leg{display:flex;gap:10px;padding:5px 10px;font-size:10px;color:#444;background:#141414;flex-wrap:wrap;border-top:1px solid #1e1e1e}
 .li{display:flex;align-items:center;gap:3px}
 #modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:100;align-items:center;justify-content:center;padding:12px}
@@ -114,9 +114,8 @@ var tool='route',drawing=false,curPts=[],dragIdx=-1,dragOff={x:0,y:0},arcStart=n
 function saveH(){hist.push({p:JSON.stringify(players),r:JSON.stringify(routes)});if(hist.length>50)hist.shift();}
 
 function setSize(){
-  var pw=C.clientWidth||document.getElementById('wrap').clientWidth;
-  var ph=C.clientHeight||Math.round(pw*(540/820));
-  C.width=pw; C.height=ph;
+  var pw=document.getElementById('wrap').clientWidth;
+  C.width=pw; C.height=Math.round(pw*(540/820));
   W=C.width; H=C.height;
   YD=W/53.33;
   YD_V=H/35;
