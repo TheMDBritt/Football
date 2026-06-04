@@ -126,6 +126,7 @@ function setSize(){
   hashPos={mof:W/2,lh:LH_X,rh:RH_X,lm:Math.round((LH_X+W/2)/2),rm:Math.round((RH_X+W/2)/2)};
   SL_WR=Math.round(3*YD);
   SLOT_IN=Math.round(6*YD);
+  OL_G=Math.round(R()*2.6);OL_T=Math.round(R()*2.6);
   QB_Y=LOS+42; RB_Y=LOS+65;
   if(!ballX)ballX=W/2;
 }
@@ -265,7 +266,7 @@ var F={
   ]);},
   gun_2x2_te:function(){return OL().concat([
     mk(SL_WR,LOS,'X','circle',O),mk(W-SL_WR,LOS,'Z','circle',O),
-    mk(ballX+OL_G+OL_T+20,LOS,'Y','circle',O),
+    mk(ballX+OL_G+OL_T+OL_T,LOS,'Y','circle',O),
     mk(ballX-OL_G-OL_T-SLOT(),LOS+8,'H','circle',O),
     mk(ballX,QB_Y,'QB','circle',Q),mk(ballX-18,RB_Y,'RB','circle',O),
   ]);},
@@ -284,7 +285,7 @@ var F={
   ]);},
   gun_3x1_te:function(){return OL().concat([
     mk(SL_WR,LOS,'X','circle',O),
-    mk(ballX+OL_G+OL_T+20,LOS,'Y','circle',O),
+    mk(ballX+OL_G+OL_T+OL_T,LOS,'Y','circle',O),
     mk(W-SL_WR,LOS,'Z','circle',O),
     mk(W-SL_WR-Math.round(4*YD),LOS+8,'H','circle',O),
     mk(ballX,QB_Y,'QB','circle',Q),mk(ballX-18,RB_Y,'RB','circle',O),
@@ -327,7 +328,7 @@ var F={
   ]);},
   ace_2x2_te:function(){return OL().concat([
     mk(SL_WR,LOS,'X','circle',O),mk(W-SL_WR,LOS,'Z','circle',O),
-    mk(ballX+OL_G+OL_T+20,LOS,'Y','circle',O),
+    mk(ballX+OL_G+OL_T+OL_T,LOS,'Y','circle',O),
     mk(ballX-OL_G-OL_T-SLOT(),LOS+8,'H','circle',O),
     mk(ballX,LOS+18,'QB','circle',Q),mk(ballX,LOS+55,'RB','circle',O),
   ]);},
@@ -340,13 +341,13 @@ var F={
   ]);},
   i_form:function(){return OL().concat([
     mk(SL_WR,LOS,'X','circle',O),mk(W-SL_WR,LOS,'Z','circle',O),
-    mk(ballX+OL_G+OL_T+20,LOS,'Y','circle',O),
+    mk(ballX+OL_G+OL_T+OL_T,LOS,'Y','circle',O),
     mk(ballX,LOS+18,'QB','circle',Q),
     mk(ballX,LOS+46,'FB','circle',O),mk(ballX,LOS+78,'RB','circle',O),
   ]);},
   i_form_trips:function(){return OL().concat([
     mk(SL_WR,LOS,'X','circle',O),
-    mk(ballX+OL_G+OL_T+20,LOS,'Y','circle',O),
+    mk(ballX+OL_G+OL_T+OL_T,LOS,'Y','circle',O),
     mk(W-SL_WR,LOS,'Z','circle',O),
     mk(W-SL_WR-Math.round(4*YD),LOS,'H','circle',O),
     mk(ballX,LOS+18,'QB','circle',Q),
@@ -354,8 +355,8 @@ var F={
   ]);},
   pro_form:function(){return OL().concat([
     mk(SL_WR,LOS,'X','circle',O),mk(W-SL_WR,LOS,'Z','circle',O),
-    mk(ballX-OL_G-OL_T-20,LOS,'Y','circle',O),
-    mk(ballX+OL_G+OL_T+20,LOS,'TE','circle',O),
+    mk(ballX-OL_G-OL_T-OL_T,LOS,'Y','circle',O),
+    mk(ballX+OL_G+OL_T+OL_T,LOS,'TE','circle',O),
     mk(ballX,LOS+18,'QB','circle',Q),mk(ballX,LOS+55,'RB','circle',O),
   ]);},
   pistol_2x2:function(){return OL().concat([
