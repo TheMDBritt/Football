@@ -1,0 +1,450 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Coach's Play Designer</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:'Segoe UI',sans-serif}
+body{background:#0f0f0f;color:#eee;min-height:100vh;display:flex;flex-direction:column;align-items:center;padding:10px;gap:8px}
+h1{font-size:13px;font-weight:600;letter-spacing:2px;text-transform:uppercase;color:#555}
+#wrap{width:100%;max-width:820px;border:1px solid #222;border-radius:6px;overflow:hidden}
+#tb{display:flex;flex-wrap:wrap;gap:5px;padding:7px 8px;background:#181818;align-items:center;border-bottom:1px solid #222}
+#tb select,#tb button{font-size:11px;padding:4px 9px;border-radius:4px;border:1px solid #333;background:#222;color:#ccc;cursor:pointer}
+#tb button:hover{background:#2a2a2a}
+#tb button.act{background:#185FA5;color:#fff;border-color:#185FA5}
+#tb .sep{width:1px;height:20px;background:#333;margin:0 2px;flex-shrink:0}
+#tb label{font-size:11px;color:#555;white-space:nowrap}
+canvas{display:block;width:100%;touch-action:none;cursor:crosshair}
+#leg{display:flex;gap:10px;padding:5px 10px;font-size:10px;color:#444;background:#141414;flex-wrap:wrap;border-top:1px solid #1e1e1e}
+.li{display:flex;align-items:center;gap:3px}
+</style>
+</head>
+<body>
+<h1>Coach's Play Designer</h1>
+<div id="wrap">
+  <div id="tb">
+    <label>Formation:</label>
+    <select id="sel-form">
+      <option value="">-- select --</option>
+      <optgroup label="Shotgun">
+        <option value="gun_2x2">Gun 2x2</option>
+        <option value="gun_2x2_te">Gun 2x2 TE on line</option>
+        <option value="gun_2x2_yoff">Gun 2x2 Y-off / sniffer</option>
+        <option value="gun_3x1">Gun 3x1</option>
+        <option value="gun_3x1_te">Gun 3x1 TE on line</option>
+        <option value="gun_3x1_yoff">Gun 3x1 Y-off / sniffer</option>
+        <option value="gun_3x1_back">Gun 3x1 backs both sides</option>
+        <option value="gun_2x2_back">Gun 2x2 backs both sides</option>
+        <option value="gun_empty">Gun Empty</option>
+      </optgroup>
+      <optgroup label="Ace / Singleback">
+        <option value="ace_2x2">Ace 2x2</option>
+        <option value="ace_2x2_te">Ace 2x2 TE on line</option>
+        <option value="ace_trips">Ace Trips</option>
+      </optgroup>
+      <optgroup label="Under Center">
+        <option value="i_form">I-Formation</option>
+        <option value="i_form_trips">I-Form Trips</option>
+        <option value="pro_form">Pro Formation</option>
+        <option value="pistol_2x2">Pistol 2x2</option>
+      </optgroup>
+    </select>
+    <div class="sep"></div>
+    <label>Ball:</label>
+    <select id="sel-hash">
+      <option value="mof">MOF</option>
+      <option value="lh">Left Hash</option>
+      <option value="rh">Right Hash</option>
+      <option value="lm">Left Mid</option>
+      <option value="rm">Right Mid</option>
+    </select>
+    <div class="sep"></div>
+    <button id="t-route" class="act">Route</button>
+    <button id="t-arrow">Arrow</button>
+    <button id="t-block">Block</button>
+    <button id="t-erase">Erase</button>
+    <div class="sep"></div>
+    <button id="btn-undo">Undo</button>
+    <button id="btn-clear" style="color:#c66;border-color:#633">Clear routes</button>
+    <button id="btn-save">Save PNG</button>
+  </div>
+  <canvas id="c"></canvas>
+  <div id="leg">
+    <div class="li"><svg width="13" height="13"><rect x="1" y="1" width="11" height="11" fill="#185FA5" rx="1"/></svg> C locked</div>
+    <div class="li"><svg width="13" height="13"><circle cx="6" cy="6" r="5" fill="#185FA5"/></svg> OL locked</div>
+    <div class="li"><svg width="13" height="13"><circle cx="6" cy="6" r="5" fill="#378ADD"/></svg> Offense drag</div>
+    <div class="li"><svg width="13" height="13"><circle cx="6" cy="6" r="5" fill="#1D9E75"/></svg> QB</div>
+    <div class="li"><svg width="13" height="13"><circle cx="6" cy="6" r="5" fill="#A32D2D"/></svg> Defense drag</div>
+    <div class="li" style="margin-left:auto;color:#333">drag players · draw routes · save PNG</div>
+  </div>
+</div>
+
+<script>
+var C=document.getElementById('c'),ctx=C.getContext('2d');
+var W,H,YD,YD_V,LOS,LH_X,RH_X,hashPos,SL_WR,SLOT_IN,QB_Y,RB_Y;
+var OL_G=22,OL_T=22;
+var ballX=0;
+var players=[],routes=[],hist=[];
+var tool='route',drawing=false,curPts=[],dragIdx=-1,dragOff={x:0,y:0},arcStart=null;
+
+function saveH(){hist.push({p:JSON.stringify(players),r:JSON.stringify(routes)});if(hist.length>50)hist.shift();}
+
+function setSize(){
+  var pw=document.getElementById('wrap').clientWidth;
+  C.width=pw; C.height=Math.round(pw*(540/820));
+  W=C.width; H=C.height;
+  YD=W/53.33;
+  YD_V=H/35;
+  LOS=Math.round(H*0.60);
+  LH_X=Math.round(W*(53.33/160));
+  RH_X=W-LH_X;
+  hashPos={mof:W/2,lh:LH_X,rh:RH_X,lm:Math.round((LH_X+W/2)/2),rm:Math.round((RH_X+W/2)/2)};
+  SL_WR=Math.round(3*YD);
+  SLOT_IN=Math.round(6*YD);
+  QB_Y=LOS+42; RB_Y=LOS+65;
+  if(!ballX)ballX=W/2;
+}
+
+function drawField(){
+  var sw=W/10;
+  for(var i=0;i<10;i++){ctx.fillStyle=i%2===0?'#273f1a':'#2d4a1d';ctx.fillRect(i*sw,0,sw,H);}
+  ctx.strokeStyle='rgba(255,255,255,0.18)';ctx.lineWidth=1;
+  for(var y=0;y<=35;y+=5){
+    var py=LOS-(y-10)*YD_V;
+    if(py>=0&&py<=H){ctx.beginPath();ctx.moveTo(0,py);ctx.lineTo(W,py);ctx.stroke();}
+  }
+  ctx.strokeStyle='rgba(255,255,255,0.65)';ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(0,LOS);ctx.lineTo(W,LOS);ctx.stroke();
+  var lbls=['40','45','50','45','40','35','30'];
+  ctx.fillStyle='rgba(255,255,255,0.4)';
+  ctx.font='bold '+Math.max(9,Math.round(W/70))+'px sans-serif';
+  ctx.textAlign='center';
+  var li=0;
+  for(var y=10;y<=35;y+=5){
+    if(y%10===0){
+      var py=LOS-y*YD_V;
+      if(py>10&&py<H&&lbls[li]){ctx.fillText(lbls[li],16,py+4);ctx.fillText(lbls[li],W-16,py+4);}
+      li++;
+    }
+  }
+  ctx.strokeStyle='rgba(255,255,255,0.4)';ctx.lineWidth=1.5;ctx.setLineDash([3,5]);
+  ctx.beginPath();ctx.moveTo(LH_X,8);ctx.lineTo(LH_X,H-8);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(RH_X,8);ctx.lineTo(RH_X,H-8);ctx.stroke();
+  ctx.setLineDash([]);
+  ctx.strokeStyle='rgba(255,255,255,0.55)';ctx.lineWidth=2;
+  ctx.beginPath();ctx.moveTo(2,0);ctx.lineTo(2,H);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(W-2,0);ctx.lineTo(W-2,H);ctx.stroke();
+  ctx.fillStyle='#e8c84a';
+  ctx.beginPath();ctx.ellipse(ballX,LOS,Math.max(5,Math.round(W/120)),Math.max(3,Math.round(W/180)),0,0,Math.PI*2);ctx.fill();
+}
+
+function R(){return Math.max(7,Math.round(W/78));}
+
+function drawPlayer(pl){
+  var r=R();
+  ctx.save();
+  ctx.fillStyle=pl.color;
+  ctx.strokeStyle=pl.locked?'rgba(255,255,255,0.3)':'rgba(255,255,255,0.85)';
+  ctx.lineWidth=pl.locked?1:1.5;
+  if(pl.shape==='sq'){ctx.fillRect(pl.x-r,pl.y-r,r*2,r*2);ctx.strokeRect(pl.x-r,pl.y-r,r*2,r*2);}
+  else{ctx.beginPath();ctx.arc(pl.x,pl.y,r,0,Math.PI*2);ctx.fill();ctx.stroke();}
+  ctx.fillStyle='#fff';
+  ctx.font='bold '+Math.max(7,Math.round(r*0.85))+'px sans-serif';
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.fillText(pl.label,pl.x,pl.y+0.5);
+  if(pl.dl){
+    ctx.fillStyle='rgba(255,215,80,0.75)';
+    ctx.font=Math.max(7,Math.round(r*0.75))+'px sans-serif';
+    ctx.textBaseline='top';
+    ctx.fillText(pl.dl,pl.x,pl.y+r+2);
+  }
+  ctx.restore();
+}
+
+function drawArrow(x1,y1,x2,y2,col){
+  var dx=x2-x1,dy=y2-y1,ang=Math.atan2(dy,dx);
+  ctx.save();ctx.strokeStyle=col;ctx.fillStyle=col;ctx.lineWidth=2.5;ctx.lineCap='round';
+  ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
+  ctx.beginPath();ctx.moveTo(x2,y2);
+  ctx.lineTo(x2-12*Math.cos(ang-0.4),y2-12*Math.sin(ang-0.4));
+  ctx.lineTo(x2-12*Math.cos(ang+0.4),y2-12*Math.sin(ang+0.4));
+  ctx.closePath();ctx.fill();ctx.restore();
+}
+function drawArc(x1,y1,x2,y2,col){
+  var mx=(x1+x2)/2,my=Math.min(y1,y2)-30;
+  ctx.save();ctx.strokeStyle=col;ctx.lineWidth=2.5;ctx.lineCap='round';
+  ctx.beginPath();ctx.moveTo(x1,y1);ctx.quadraticCurveTo(mx,my,x2,y2);ctx.stroke();ctx.restore();
+}
+
+function render(){
+  drawField();
+  routes.forEach(function(r){
+    ctx.save();ctx.strokeStyle=r.col;ctx.lineWidth=2.5;ctx.lineCap='round';ctx.lineJoin='round';
+    if(r.type==='route'){ctx.setLineDash([6,3]);ctx.beginPath();r.pts.forEach(function(p,i){i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y);});ctx.stroke();ctx.setLineDash([]);}
+    else if(r.type==='arrow'){drawArrow(r.x1,r.y1,r.x2,r.y2,r.col);}
+    else{drawArc(r.x1,r.y1,r.x2,r.y2,r.col);}
+    ctx.restore();
+  });
+  if(drawing&&tool==='route'&&curPts.length>1){
+    ctx.save();ctx.strokeStyle='#5af';ctx.lineWidth=2;ctx.setLineDash([5,3]);ctx.lineCap='round';
+    ctx.beginPath();curPts.forEach(function(p,i){i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y);});
+    ctx.stroke();ctx.setLineDash([]);ctx.restore();
+  }
+  players.forEach(drawPlayer);
+}
+
+function mk(x,y,lb,sh,col,lk,dl){return{x:x,y:y,label:lb,shape:sh||'circle',color:col,locked:!!lk,dl:dl||null};}
+
+function OL(){
+  return[
+    mk(ballX,LOS,'C','sq','#185FA5',true),
+    mk(ballX-OL_G,LOS,'LG','circle','#185FA5',true),
+    mk(ballX+OL_G,LOS,'RG','circle','#185FA5',true),
+    mk(ballX-OL_G-OL_T,LOS,'LT','circle','#185FA5',true),
+    mk(ballX+OL_G+OL_T,LOS,'RT','circle','#185FA5',true),
+  ];
+}
+
+var O='#378ADD',Q='#1D9E75',D='#A32D2D';
+var SLOT=function(){return Math.round(6*YD);};
+
+var F={
+  gun_2x2:function(){return OL().concat([
+    mk(SL_WR,LOS,'X','circle',O),mk(W-SL_WR,LOS,'Z','circle',O),
+    mk(ballX-OL_G-OL_T-SLOT(),LOS+8,'H','circle',O),
+    mk(ballX+OL_G+OL_T+SLOT(),LOS+8,'Y','circle',O),
+    mk(ballX,QB_Y,'QB','circle',Q),mk(ballX-18,RB_Y,'RB','circle',O),
+  ]);},
+  gun_2x2_te:function(){return OL().concat([
+    mk(SL_WR,LOS,'X','circle',O),mk(W-SL_WR,LOS,'Z','circle',O),
+    mk(ballX+OL_G+OL_T+20,LOS,'Y','circle',O),
+    mk(ballX-OL_G-OL_T-SLOT(),LOS+8,'H','circle',O),
+    mk(ballX,QB_Y,'QB','circle',Q),mk(ballX-18,RB_Y,'RB','circle',O),
+  ]);},
+  gun_2x2_yoff:function(){return OL().concat([
+    mk(SL_WR,LOS,'X','circle',O),mk(W-SL_WR,LOS,'Z','circle',O),
+    mk(ballX-OL_G-OL_T-SLOT(),LOS+8,'H','circle',O),
+    mk(ballX+OL_G+OL_T+Math.round(3*YD),LOS+30,'Y','circle',O),
+    mk(ballX,QB_Y,'QB','circle',Q),mk(ballX-18,RB_Y,'RB','circle',O),
+  ]);},
+  gun_3x1:function(){return OL().concat([
+    mk(SL_WR,LOS,'X','circle',O),
+    mk(W-SL_WR,LOS,'Z','circle',O),
+    mk(W-SL_WR-Math.round(4*YD),LOS,'Y','circle',O),
+    mk(W-SL_WR-Math.round(8*YD),LOS+8,'H','circle',O),
+    mk(ballX,QB_Y,'QB','circle',Q),mk(ballX-18,RB_Y,'RB','circle',O),
+  ]);},
+  gun_3x1_te:function(){return OL().concat([
+    mk(SL_WR,LOS,'X','circle',O),
+    mk(ballX+OL_G+OL_T+20,LOS,'Y','circle',O),
+    mk(W-SL_WR,LOS,'Z','circle',O),
+    mk(W-SL_WR-Math.round(4*YD),LOS+8,'H','circle',O),
+    mk(ballX,QB_Y,'QB','circle',Q),mk(ballX-18,RB_Y,'RB','circle',O),
+  ]);},
+  gun_3x1_yoff:function(){return OL().concat([
+    mk(SL_WR,LOS,'X','circle',O),
+    mk(W-SL_WR,LOS,'Z','circle',O),
+    mk(W-SL_WR-Math.round(4*YD),LOS,'H','circle',O),
+    mk(ballX+OL_G+OL_T+Math.round(3*YD),LOS+30,'Y','circle',O),
+    mk(ballX,QB_Y,'QB','circle',Q),mk(ballX-18,RB_Y,'RB','circle',O),
+  ]);},
+  gun_3x1_back:function(){return OL().concat([
+    mk(SL_WR,LOS,'X','circle',O),
+    mk(W-SL_WR,LOS,'Z','circle',O),
+    mk(W-SL_WR-Math.round(4*YD),LOS,'Y','circle',O),
+    mk(W-SL_WR-Math.round(8*YD),LOS+8,'H','circle',O),
+    mk(ballX,QB_Y,'QB','circle',Q),
+    mk(ballX-28,RB_Y,'RB','circle',O),mk(ballX+28,RB_Y,'FB','circle',O),
+  ]);},
+  gun_2x2_back:function(){return OL().concat([
+    mk(SL_WR,LOS,'X','circle',O),mk(W-SL_WR,LOS,'Z','circle',O),
+    mk(ballX-OL_G-OL_T-SLOT(),LOS+8,'H','circle',O),
+    mk(ballX+OL_G+OL_T+SLOT(),LOS+8,'Y','circle',O),
+    mk(ballX,QB_Y,'QB','circle',Q),
+    mk(ballX-28,RB_Y,'RB','circle',O),mk(ballX+28,RB_Y,'FB','circle',O),
+  ]);},
+  gun_empty:function(){return OL().concat([
+    mk(SL_WR,LOS,'X','circle',O),
+    mk(ballX-OL_G-OL_T-Math.round(3*YD),LOS,'H','circle',O),
+    mk(ballX+OL_G+OL_T+Math.round(3*YD),LOS,'Y','circle',O),
+    mk(W-SL_WR-Math.round(4*YD),LOS,'A','circle',O),
+    mk(W-SL_WR,LOS,'Z','circle',O),
+    mk(ballX,QB_Y,'QB','circle',Q),
+  ]);},
+  ace_2x2:function(){return OL().concat([
+    mk(SL_WR,LOS,'X','circle',O),mk(W-SL_WR,LOS,'Z','circle',O),
+    mk(ballX-OL_G-OL_T-SLOT(),LOS+8,'H','circle',O),
+    mk(ballX+OL_G+OL_T+SLOT(),LOS+8,'Y','circle',O),
+    mk(ballX,LOS+18,'QB','circle',Q),mk(ballX,LOS+55,'RB','circle',O),
+  ]);},
+  ace_2x2_te:function(){return OL().concat([
+    mk(SL_WR,LOS,'X','circle',O),mk(W-SL_WR,LOS,'Z','circle',O),
+    mk(ballX+OL_G+OL_T+20,LOS,'Y','circle',O),
+    mk(ballX-OL_G-OL_T-SLOT(),LOS+8,'H','circle',O),
+    mk(ballX,LOS+18,'QB','circle',Q),mk(ballX,LOS+55,'RB','circle',O),
+  ]);},
+  ace_trips:function(){return OL().concat([
+    mk(SL_WR,LOS,'X','circle',O),
+    mk(W-SL_WR,LOS,'Z','circle',O),
+    mk(W-SL_WR-Math.round(4*YD),LOS,'Y','circle',O),
+    mk(W-SL_WR-Math.round(8*YD),LOS+8,'H','circle',O),
+    mk(ballX,LOS+18,'QB','circle',Q),mk(ballX,LOS+55,'RB','circle',O),
+  ]);},
+  i_form:function(){return OL().concat([
+    mk(SL_WR,LOS,'X','circle',O),mk(W-SL_WR,LOS,'Z','circle',O),
+    mk(ballX+OL_G+OL_T+20,LOS,'Y','circle',O),
+    mk(ballX,LOS+18,'QB','circle',Q),
+    mk(ballX,LOS+46,'FB','circle',O),mk(ballX,LOS+78,'RB','circle',O),
+  ]);},
+  i_form_trips:function(){return OL().concat([
+    mk(SL_WR,LOS,'X','circle',O),
+    mk(ballX+OL_G+OL_T+20,LOS,'Y','circle',O),
+    mk(W-SL_WR,LOS,'Z','circle',O),
+    mk(W-SL_WR-Math.round(4*YD),LOS,'H','circle',O),
+    mk(ballX,LOS+18,'QB','circle',Q),
+    mk(ballX,LOS+46,'FB','circle',O),mk(ballX,LOS+78,'RB','circle',O),
+  ]);},
+  pro_form:function(){return OL().concat([
+    mk(SL_WR,LOS,'X','circle',O),mk(W-SL_WR,LOS,'Z','circle',O),
+    mk(ballX-OL_G-OL_T-20,LOS,'Y','circle',O),
+    mk(ballX+OL_G+OL_T+20,LOS,'TE','circle',O),
+    mk(ballX,LOS+18,'QB','circle',Q),mk(ballX,LOS+55,'RB','circle',O),
+  ]);},
+  pistol_2x2:function(){return OL().concat([
+    mk(SL_WR,LOS,'X','circle',O),mk(W-SL_WR,LOS,'Z','circle',O),
+    mk(ballX-OL_G-OL_T-SLOT(),LOS+8,'H','circle',O),
+    mk(ballX+OL_G+OL_T+SLOT(),LOS+8,'Y','circle',O),
+    mk(ballX,LOS+25,'QB','circle',Q),mk(ballX,LOS+65,'RB','circle',O),
+  ]);},
+};
+
+function autoDef(key){
+  var trips=(key.indexOf('3x1')>=0||key.indexOf('trips')>=0||key.indexOf('empty')>=0);
+  var DLY=LOS-Math.round(1.2*YD_V);
+  var MIKEY=LOS-Math.round(4.5*YD_V);
+  var WILLY=LOS-Math.round(5*YD_V);
+  var NICKY=LOS-Math.round(4.5*YD_V);
+  var CBY=LOS-Math.round(1.2*YD_V);
+  var SY=LOS-Math.round(12*YD_V);
+  var nickX=trips?W-SL_WR-Math.round(2*YD):ballX+Math.round(4*YD);
+  var willX=ballX-Math.round(3.5*YD);
+  var mikeX=ballX+Math.round(1.5*YD);
+  return[
+    mk(ballX-Math.round(2*YD),DLY,'3T','circle',D),
+    mk(ballX+Math.round(2*YD),DLY,'1T','circle',D),
+    mk(ballX-Math.round(4.5*YD),DLY,'DE','circle',D),
+    mk(ballX+Math.round(4.5*YD),DLY,'DE','circle',D),
+    mk(willX,WILLY,'WILL','circle',D,false,'5 yds'),
+    mk(mikeX,MIKEY,'MIKE','circle',D,false,'4-5 yds'),
+    mk(nickX,NICKY,'NICK','circle',D),
+    mk(SL_WR+Math.round(YD),CBY,'CB','circle',D),
+    mk(W-SL_WR-Math.round(YD),CBY,'CB','circle',D),
+    mk(ballX-Math.round(3*YD),SY,'FS','circle',D),
+    mk(ballX+Math.round(3*YD),SY,'SS','circle',D),
+  ];
+}
+
+function loadForm(key){
+  if(!key||!F[key])return;
+  saveH();routes=[];
+  players=F[key]().concat(autoDef(key));
+  render();
+}
+
+document.getElementById('sel-form').addEventListener('change',function(){loadForm(this.value);this.value='';});
+
+document.getElementById('sel-hash').addEventListener('change',function(){
+  var nx=hashPos[this.value]||W/2;
+  if(nx===ballX)return;
+  saveH();
+  var dx=nx-ballX;
+  players=players.map(function(p){return p.locked?Object.assign({},p,{x:p.x+dx}):p;});
+  ballX=nx;render();
+});
+
+['route','arrow','block','erase'].forEach(function(t){
+  document.getElementById('t-'+t).addEventListener('click',function(){
+    tool=t;
+    document.querySelectorAll('#tb button').forEach(function(b){b.classList.remove('act');});
+    this.classList.add('act');
+  });
+});
+
+document.getElementById('btn-undo').addEventListener('click',function(){
+  if(hist.length){var s=hist.pop();players=JSON.parse(s.p);routes=JSON.parse(s.r);render();}
+});
+document.getElementById('btn-clear').addEventListener('click',function(){saveH();routes=[];render();});
+document.getElementById('btn-save').addEventListener('click',function(){
+  var a=document.createElement('a');a.download='play.png';a.href=C.toDataURL();a.click();
+});
+
+function gp(e){
+  var r=C.getBoundingClientRect(),s=e.touches?e.touches[0]:e;
+  return{x:(s.clientX-r.left)*(C.width/r.width),y:(s.clientY-r.top)*(C.height/r.height)};
+}
+function hitP(x,y){
+  var r=R()+2;
+  for(var i=players.length-1;i>=0;i--){
+    if(players[i].locked)continue;
+    if(Math.hypot(x-players[i].x,y-players[i].y)<r)return i;
+  }return -1;
+}
+function hitR(x,y){
+  for(var i=routes.length-1;i>=0;i--){
+    var r=routes[i];
+    if(r.type==='route'){
+      for(var j=0;j<r.pts.length-1;j++){
+        var dx=r.pts[j+1].x-r.pts[j].x,dy=r.pts[j+1].y-r.pts[j].y,len=Math.sqrt(dx*dx+dy*dy);
+        if(len<1)continue;
+        var t=Math.max(0,Math.min(1,((x-r.pts[j].x)*dx+(y-r.pts[j].y)*dy)/(len*len)));
+        if(Math.hypot(x-r.pts[j].x-t*dx,y-r.pts[j].y-t*dy)<10)return i;
+      }
+    } else if(Math.hypot(x-r.x1,y-r.y1)<14||Math.hypot(x-r.x2,y-r.y2)<14)return i;
+  }return -1;
+}
+function onDown(pos){
+  if(tool==='erase'){
+    saveH();
+    var pi=hitP(pos.x,pos.y);if(pi>=0){players.splice(pi,1);render();return;}
+    var ri=hitR(pos.x,pos.y);if(ri>=0){routes.splice(ri,1);render();}
+    return;
+  }
+  var pi=hitP(pos.x,pos.y);
+  if(pi>=0){dragIdx=pi;dragOff={x:pos.x-players[pi].x,y:pos.y-players[pi].y};return;}
+  drawing=true;
+  if(tool==='route')curPts=[pos];
+  else arcStart=pos;
+}
+function onMove(pos){
+  if(dragIdx>=0){players[dragIdx].x=pos.x-dragOff.x;players[dragIdx].y=pos.y-dragOff.y;render();return;}
+  if(!drawing)return;
+  if(tool==='route'){curPts.push(pos);render();}
+  else if(arcStart){
+    render();
+    if(tool==='arrow')drawArrow(arcStart.x,arcStart.y,pos.x,pos.y,'#5af');
+    else drawArc(arcStart.x,arcStart.y,pos.x,pos.y,'#5af');
+  }
+}
+function onUp(pos){
+  if(dragIdx>=0){saveH();dragIdx=-1;render();return;}
+  if(!drawing)return;drawing=false;
+  if(tool==='route'&&curPts.length>1){saveH();routes.push({type:'route',pts:curPts.slice(),col:'#5af'});curPts=[];}
+  else if(arcStart){saveH();routes.push({type:tool,x1:arcStart.x,y1:arcStart.y,x2:pos.x,y2:pos.y,col:'#5af'});arcStart=null;}
+  render();
+}
+
+C.addEventListener('mousedown',function(e){onDown(gp(e));});
+C.addEventListener('mousemove',function(e){onMove(gp(e));});
+C.addEventListener('mouseup',function(e){onUp(gp(e));});
+C.addEventListener('touchstart',function(e){e.preventDefault();onDown(gp(e));},{passive:false});
+C.addEventListener('touchmove',function(e){e.preventDefault();onMove(gp(e));},{passive:false});
+C.addEventListener('touchend',function(e){e.preventDefault();var t=e.changedTouches[0],r=C.getBoundingClientRect();onUp({x:(t.clientX-r.left)*(C.width/r.width),y:(t.clientY-r.top)*(C.height/r.height)});},{passive:false});
+
+window.addEventListener('resize',function(){setSize();if(players.length)render();});
+setSize();
+ballX=W/2;
+loadForm('gun_2x2');
+</script>
+</body>
+</html>
