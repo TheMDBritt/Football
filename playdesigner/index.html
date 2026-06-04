@@ -86,6 +86,7 @@ canvas{display:block;width:100%;touch-action:none;cursor:crosshair}
     </select>
     <div class="sep"></div>
     <button id="t-route" class="act">Route</button>
+    <button id="t-routetree">Route Tree</button>
     <button id="t-arrow">Arrow</button>
     <button id="t-block">Block</button>
     <button id="t-erase">Erase</button>
@@ -148,7 +149,7 @@ var OL_G=22,OL_T=22;
 var ballX=0,view='both';
 var players=[],routes=[],hist=[],assigns=[],zones=[];
 var uid=0;function nextId(){return ++uid;}
-var tool='route',drawing=false,curPts=[],dragIdx=-1,dragOff={x:0,y:0},arcStart=null,dragAssign=-1,zoneDrag=null,lastClient={x:0,y:0};
+var tool='route',drawing=false,curPts=[],dragIdx=-1,dragOff={x:0,y:0},arcStart=null,dragAssign=-1,zoneDrag=null,stemDrag=-1,lastClient={x:0,y:0};
 
 function saveH(){hist.push({p:JSON.stringify(players),r:JSON.stringify(routes),a:JSON.stringify(assigns),z:JSON.stringify(zones)});if(hist.length>50)hist.shift();}
 
@@ -268,6 +269,7 @@ function render(){
   routes.forEach(function(r){
     ctx.save();ctx.strokeStyle=r.col;ctx.lineWidth=2.5;ctx.lineCap='round';ctx.lineJoin='round';
     if(r.type==='route'){ctx.setLineDash([6,3]);ctx.beginPath();r.pts.forEach(function(p,i){i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y);});ctx.stroke();ctx.setLineDash([]);}
+    else if(r.type==='tree'){drawTree(r);}
     else if(r.type==='arrow'){drawArrow(r.x1,r.y1,r.x2,r.y2,r.col);}
     else{drawArc(r.x1,r.y1,r.x2,r.y2,r.col);}
     ctx.restore();
@@ -448,7 +450,7 @@ document.getElementById('sel-hash').addEventListener('change',function(){
   ballX=nx;render();
 });
 
-['route','arrow','block','erase','runfit','passrush','coverage'].forEach(function(t){
+['route','routetree','arrow','block','erase','runfit','passrush','coverage'].forEach(function(t){
   document.getElementById('t-'+t).addEventListener('click',function(){setTool(t);});
 });
 
@@ -472,12 +474,14 @@ function hitP(x,y){
 function hitR(x,y){
   for(var i=routes.length-1;i>=0;i--){
     var r=routes[i];
-    if(r.type==='route'){
-      for(var j=0;j<r.pts.length-1;j++){
-        var dx=r.pts[j+1].x-r.pts[j].x,dy=r.pts[j+1].y-r.pts[j].y,len=Math.sqrt(dx*dx+dy*dy);
+    if(r.type==='route'||r.type==='tree'){
+      var pts=r.pts;
+      if(r.type==='tree'){var pl=playerById(r.pid);if(!pl)continue;pts=routePoints(pl,r.concept,r.stem);}
+      for(var j=0;j<pts.length-1;j++){
+        var dx=pts[j+1].x-pts[j].x,dy=pts[j+1].y-pts[j].y,len=Math.sqrt(dx*dx+dy*dy);
         if(len<1)continue;
-        var t=Math.max(0,Math.min(1,((x-r.pts[j].x)*dx+(y-r.pts[j].y)*dy)/(len*len)));
-        if(Math.hypot(x-r.pts[j].x-t*dx,y-r.pts[j].y-t*dy)<10)return i;
+        var t=Math.max(0,Math.min(1,((x-pts[j].x)*dx+(y-pts[j].y)*dy)/(len*len)));
+        if(Math.hypot(x-pts[j].x-t*dx,y-pts[j].y-t*dy)<10)return i;
       }
     } else if(Math.hypot(x-r.x1,y-r.y1)<14||Math.hypot(x-r.x2,y-r.y2)<14)return i;
   }return -1;
@@ -489,6 +493,11 @@ function onDown(pos){
     var ae=hitAssign(pos.x,pos.y);if(ae>=0){assigns.splice(ae,1);render();return;}
     var ze=hitZone(pos.x,pos.y);if(ze>=0){zones.splice(ze,1);render();return;}
     var re=hitR(pos.x,pos.y);if(re>=0){routes.splice(re,1);render();return;}
+    return;
+  }
+  if(tool==='routetree'){
+    var rs=hitStem(pos.x,pos.y);if(rs>=0){stemDrag=rs;return;}
+    var rp=hitP(pos.x,pos.y);if(rp>=0&&players[rp].color===O){openRouteMenu(rp,pos);return;}
     return;
   }
   if(tool==='runfit'||tool==='passrush'||tool==='coverage'){
@@ -506,6 +515,7 @@ function onDown(pos){
 function onMove(pos){
   if(dragIdx>=0){players[dragIdx].x=pos.x-dragOff.x;players[dragIdx].y=pos.y-dragOff.y;render();return;}
   if(dragAssign>=0){assigns[dragAssign].tx=pos.x;assigns[dragAssign].ty=pos.y;render();return;}
+  if(stemDrag>=0){var rt=routes[stemDrag],rpl=playerById(rt.pid);if(rpl)rt.stem=Math.max(Math.round(2*YD_V),rpl.y-pos.y);render();return;}
   if(zoneDrag){var z=zones[zoneDrag.i];if(zoneDrag.mode==='move'){z.x=pos.x-zoneDrag.ox;z.y=pos.y-zoneDrag.oy;}else{z.rx=Math.max(16,Math.abs(pos.x-z.x));z.ry=Math.max(12,Math.abs(pos.y-z.y));}render();return;}
   if(!drawing)return;
   if(tool==='route'){curPts.push(pos);render();}
@@ -518,6 +528,7 @@ function onMove(pos){
 function onUp(pos){
   if(dragIdx>=0){saveH();dragIdx=-1;render();return;}
   if(dragAssign>=0){saveH();dragAssign=-1;render();return;}
+  if(stemDrag>=0){saveH();stemDrag=-1;render();return;}
   if(zoneDrag){saveH();zoneDrag=null;render();return;}
   if(!drawing)return;drawing=false;
   if(tool==='route'&&curPts.length>1){saveH();routes.push({type:'route',pts:curPts.slice(),col:'#5af'});curPts=[];}
@@ -885,6 +896,59 @@ function applyCoverage(scheme){
     manAlign([ss,nick,will,mike,fs]);
   }
   render();
+}
+
+/* ---- Offense route tree (placeable + adjustable stem) ---- */
+var ROUTES=['Hitch','Slant','Flat','Out','In (Dig)','Curl','Comeback','Corner','Post','Go (Fly)','Seam','Wheel','Drag','Screen'];
+function defStem(c){var s={'Hitch':6,'Slant':3,'Flat':1,'Out':8,'In (Dig)':10,'Curl':10,'Comeback':13,'Corner':10,'Post':10,'Go (Fly)':14,'Seam':14,'Wheel':3,'Drag':2,'Screen':0}[c];return Math.round((s==null?8:s)*YD_V);}
+function routePoints(p,c,stem){
+  var x=p.x,y=p.y,outDir=x<W/2?-1:1,inDir=-outDir;
+  var brk=Math.round(6*YD),dz=Math.round(7*YD),by=y-stem;
+  switch(c){
+    case 'Go (Fly)': case 'Seam': return [{x:x,y:y},{x:x,y:y-Math.max(stem,Math.round(16*YD_V))}];
+    case 'Hitch': return [{x:x,y:y},{x:x,y:by},{x:x+inDir*Math.round(1.5*YD),y:by+Math.round(1.5*YD_V)}];
+    case 'Slant': return [{x:x,y:y},{x:x,y:by},{x:x+inDir*dz,y:by-dz}];
+    case 'Flat': return [{x:x,y:y},{x:x+outDir*Math.round(5*YD),y:by}];
+    case 'Out': return [{x:x,y:y},{x:x,y:by},{x:x+outDir*brk,y:by}];
+    case 'In (Dig)': return [{x:x,y:y},{x:x,y:by},{x:x+inDir*brk,y:by}];
+    case 'Curl': return [{x:x,y:y},{x:x,y:by},{x:x+inDir*Math.round(2*YD),y:by+Math.round(2*YD_V)}];
+    case 'Comeback': return [{x:x,y:y},{x:x,y:by},{x:x+outDir*Math.round(3*YD),y:by+Math.round(2.5*YD_V)}];
+    case 'Corner': return [{x:x,y:y},{x:x,y:by},{x:x+outDir*dz,y:by-dz}];
+    case 'Post': return [{x:x,y:y},{x:x,y:by},{x:x+inDir*dz,y:by-dz}];
+    case 'Wheel': return [{x:x,y:y},{x:x+outDir*Math.round(5*YD),y:y-Math.round(1*YD_V)},{x:x+outDir*Math.round(6*YD),y:by-dz}];
+    case 'Drag': return [{x:x,y:y},{x:x+inDir*Math.round(10*YD),y:y-Math.round(3*YD_V)}];
+    case 'Screen': return [{x:x,y:y},{x:x+outDir*Math.round(3*YD),y:y+Math.round(2*YD_V)}];
+    default: return [{x:x,y:y},{x:x,y:by}];
+  }
+}
+function drawTree(r){
+  var pl=playerById(r.pid);if(!pl)return;
+  var pts=routePoints(pl,r.concept,r.stem);
+  ctx.strokeStyle=r.col;ctx.lineWidth=2.5;ctx.lineCap='round';ctx.lineJoin='round';
+  ctx.beginPath();pts.forEach(function(p,i){i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y);});ctx.stroke();
+  var a=pts[pts.length-2],b=pts[pts.length-1],ang=Math.atan2(b.y-a.y,b.x-a.x);
+  ctx.fillStyle=r.col;ctx.beginPath();ctx.moveTo(b.x,b.y);
+  ctx.lineTo(b.x-11*Math.cos(ang-0.4),b.y-11*Math.sin(ang-0.4));
+  ctx.lineTo(b.x-11*Math.cos(ang+0.4),b.y-11*Math.sin(ang+0.4));
+  ctx.closePath();ctx.fill();
+  if(tool==='routetree'){var hb=pts[1]||b;ctx.fillStyle='#fff';ctx.strokeStyle=r.col;ctx.lineWidth=2;ctx.beginPath();ctx.arc(hb.x,hb.y,5,0,Math.PI*2);ctx.fill();ctx.stroke();}
+}
+function hitStem(x,y){
+  for(var i=routes.length-1;i>=0;i--){if(routes[i].type!=='tree')continue;var pl=playerById(routes[i].pid);if(!pl)continue;var pts=routePoints(pl,routes[i].concept,routes[i].stem);var b=pts[1]||pts[pts.length-1];if(Math.hypot(x-b.x,y-b.y)<14)return i;}return -1;
+}
+function addRoute(pi,concept){
+  var p=players[pi];saveH();
+  routes=routes.filter(function(r){return !(r.type==='tree'&&r.pid===p.id);});
+  routes.push({type:'tree',pid:p.id,concept:concept,stem:defStem(concept),col:'#5af'});
+  closeMenu();render();
+}
+function openRouteMenu(pi,pos){
+  ctxMenu.innerHTML='';
+  var t=document.createElement('div');t.className='ttl';t.textContent=players[pi].label+' · Route';ctxMenu.appendChild(t);
+  ROUTES.forEach(function(rc){var b=document.createElement('button');b.textContent=rc;b.addEventListener('click',function(ev){ev.stopPropagation();addRoute(pi,rc);});ctxMenu.appendChild(b);});
+  ctxMenu.style.left=Math.max(4,Math.min(lastClient.x,window.innerWidth-180))+'px';
+  ctxMenu.style.top=Math.max(4,Math.min(lastClient.y,window.innerHeight-340))+'px';
+  ctxMenu.classList.add('open');
 }
 </script>
 </body>
