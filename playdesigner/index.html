@@ -960,7 +960,8 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){closeMenu()
 
 document.getElementById('sel-cov').addEventListener('change',function(){applyCoverage(this.value);this.value='';});
 function getReceivers(){return players.filter(function(p){return p.color===O&&p.y<=LOS+R()*2.2;}).sort(function(a,b){return a.x-b.x;});}
-function alignOver(d,r){if(!d||!r)return;var lev=Math.round(0.6*YD)*(r.x<ballX?1:-1);var dep=d.label==='CB'?1.2:(d.label==='NICK'||d.label==='SS')?4:3;d.x=Math.round(r.x+lev);d.y=Math.round(LOS-dep*YD_V);}
+var manScheme='';
+function alignOver(d,r){if(!d||!r)return;var lev=Math.round(0.6*YD)*(r.x<ballX?1:-1);var dep;if(d.label==='CB')dep=manScheme==='0'?1.2:4;else if(d.label==='NICK'||d.label==='SS')dep=4;else dep=3;d.x=Math.round(r.x+lev);d.y=Math.round(LOS-dep*YD_V);}
 function manAlign(extra){
   var cbs=defByLabel('CB').sort(function(a,b){return a.x-b.x;});
   var recs=getReceivers();if(!recs.length)return;
@@ -996,8 +997,11 @@ function applyCoverage(scheme,internal){
   var fs=defByLabel('FS')[0],ss=defByLabel('SS')[0],mike=defByLabel('MIKE')[0],will=defByLabel('WILL')[0],nick=defByLabel('NICK')[0];
   function P(p,x,y){if(p){p.x=Math.round(x);p.y=Math.round(y);}}
   var deepY=LOS-Math.round(14*YD_V),offY=LOS-Math.round(7*YD_V),uy=LOS-Math.round(5*YD_V),midY=LOS-Math.round(10*YD_V);
-  var cbL=offY,cbR=offY;
-  if(hash<0){cbL=LOS-Math.round(5.5*YD_V);cbR=LOS-Math.round(8*YD_V);}else if(hash>0){cbR=LOS-Math.round(5.5*YD_V);cbL=LOS-Math.round(8*YD_V);}
+  var cbBase={'2':2,'3':10,'4':8,'palm':8}[scheme]||7;
+  var sg=cbBase>=7?1.5:(cbBase>=3?1:0.5);
+  var bD=Math.max(1,cbBase-sg),fD=cbBase+sg;
+  var cbDepL=hash<0?bD:hash>0?fD:cbBase,cbDepR=hash>0?bD:hash<0?fD:cbBase;
+  var cbL=LOS-Math.round(cbDepL*YD_V),cbR=LOS-Math.round(cbDepR*YD_V);
   var dR=Math.round(W*0.095),dRy=Math.round(5*YD_V),uR=Math.round(W*0.07),uRy=Math.round(3.2*YD_V),qR=Math.round(W*0.08),hR=Math.round(W*0.13);
   var clL=loX+Math.round(span*0.16),clR=hiX-Math.round(span*0.16),strongCl=strong>0?clR:clL,weakCl=strong>0?clL:clR;
   var bxL=ballX-Math.round(span*0.13),bxR=ballX+Math.round(span*0.13);
@@ -1030,9 +1034,9 @@ function applyCoverage(scheme,internal){
     setCov(nick,'Wall 2',uR,uRy);setCov(will,'Hook/Curl',uR,uRy);setCov(mike,'Match 3',uR,uRy);
   }else if(scheme==='1'){
     P(fs,ballX,deepY);setCov(fs,'Deep MOF',hR,dRy);
-    manCover(true);
+    manScheme='1';manCover(true);manScheme='';
   }else if(scheme==='0'){
-    manCover(false);
+    manScheme='0';manCover(false);manScheme='';
   }
   render();
 }
