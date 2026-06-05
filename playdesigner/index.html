@@ -94,7 +94,6 @@ canvas{display:block;width:100%;touch-action:none;cursor:crosshair}
     <div class="sep"></div>
     <button id="t-assign" class="act">Assign</button>
     <button id="t-route">Draw</button>
-    <button id="t-block">Block</button>
     <button id="t-erase">Erase</button>
     <div class="sep"></div>
     <label>Cov:</label>
@@ -450,7 +449,7 @@ document.getElementById('sel-hash').addEventListener('change',function(){
   ballX=nx;render();
 });
 
-['assign','route','block','erase'].forEach(function(t){
+['assign','route','erase'].forEach(function(t){
   document.getElementById('t-'+t).addEventListener('click',function(){setTool(t);});
 });
 document.getElementById('btn-defview').addEventListener('click',function(){defView=!defView;this.classList.toggle('act',defView);render();});
