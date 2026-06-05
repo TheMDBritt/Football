@@ -142,7 +142,7 @@ canvas{display:block;width:100%;touch-action:none;cursor:crosshair}
 var C=document.getElementById('c'),ctx=C.getContext('2d');
 var W,H,YD,YD_V,LOS,LH_X,RH_X,hashPos,SL_WR,SLOT_IN,QB_Y,RB_Y;
 var OL_G=22,OL_T=22;
-var ballX=0,play='pass',defView=false;
+var ballX=0,play='pass',defView=false,curCov='';
 var players=[],routes=[],hist=[],assigns=[],zones=[];
 var uid=0;function nextId(){return ++uid;}
 var tool='assign',drawing=false,curPts=[],dragIdx=-1,dragOff={x:0,y:0},arcStart=null,dragAssign=-1,dragMode='move',zoneDrag=null,stemDrag=-1,lastClient={x:0,y:0},lastTap=0;
@@ -224,7 +224,7 @@ function drawBall(){
 function R(){return Math.max(8,Math.round(W/70));}
 function fillTextU(s,x,y){if(defView){ctx.save();ctx.translate(x,y);ctx.scale(1,-1);ctx.fillText(s,0,0);ctx.restore();}else ctx.fillText(s,x,y);}
 
-function nearestDist(pl){var m=1e9;players.forEach(function(o){if(o!==pl){var d=Math.hypot(o.x-pl.x,o.y-pl.y);if(d<m)m=d;}});return m;}
+function nearestDist(pl){if(pl.locked)return 1e9;var m=1e9;players.forEach(function(o){if(o!==pl&&!o.locked&&o.color===pl.color){var d=Math.hypot(o.x-pl.x,o.y-pl.y);if(d<m)m=d;}});return m;}
 function drawPlayer(pl){
   var R0=R(),r=R0,nd=nearestDist(pl);
   if(nd<2*R0+2)r=Math.max(Math.round(R0*0.62),Math.floor(nd/2-1));
@@ -439,10 +439,24 @@ function autoDef(key){
   ];
 }
 
+function remapManTargets(){
+  assigns.forEach(function(a){
+    if(a.targetPid!=null&&a.role&&a.role.indexOf('Man ')===0){
+      var lbl=a.role.slice(4),np=null;
+      for(var i=0;i<players.length;i++){if(players[i].color===O&&players[i].label===lbl){np=players[i];break;}}
+      if(np)a.targetPid=np.id;
+    }
+  });
+}
 function loadForm(key){
   if(!key||!F[key])return;
-  saveH();routes=[];assigns=[];zones=[];
-  players=F[key]().concat(autoDef(key));
+  saveH();
+  var def=players.filter(function(p){return p.color===D;});
+  if(!def.length)def=autoDef(key);
+  players=F[key]().concat(def);
+  routes=[];
+  ensureIds();remapManTargets();
+  if(curCov)applyCoverage(curCov,true);
   render();
 }
 
@@ -454,7 +468,9 @@ document.getElementById('sel-hash').addEventListener('change',function(){
   saveH();
   var dx=nx-ballX,r=R(),lo=r,hi=W-r;
   players=players.map(function(p){return Object.assign({},p,{x:Math.max(lo,Math.min(hi,p.x+dx))});});
-  ballX=nx;render();
+  ballX=nx;
+  if(curCov)applyCoverage(curCov,true);
+  render();
 });
 
 ['assign','route','erase'].forEach(function(t){
@@ -465,7 +481,7 @@ document.getElementById('btn-defview').addEventListener('click',function(){defVi
 document.getElementById('btn-undo').addEventListener('click',function(){
   if(hist.length){var s=hist.pop();players=JSON.parse(s.p);routes=JSON.parse(s.r);assigns=s.a?JSON.parse(s.a):[];zones=s.z?JSON.parse(s.z):[];ensureIds();normalizeAssigns();render();}
 });
-document.getElementById('btn-clear').addEventListener('click',function(){saveH();routes=[];assigns=[];zones=[];render();});
+document.getElementById('btn-clear').addEventListener('click',function(){saveH();routes=[];assigns=[];zones=[];curCov='';render();});
 document.getElementById('btn-save').addEventListener('click',function(){exportPNG();});
 
 function gp(e){
@@ -918,7 +934,7 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){closeMenu()
 
 document.getElementById('sel-cov').addEventListener('change',function(){applyCoverage(this.value);this.value='';});
 function getReceivers(){return players.filter(function(p){return p.color===O&&p.y<=LOS+R()*2.2;}).sort(function(a,b){return a.x-b.x;});}
-function alignOver(d,r){if(d&&r){d.x=Math.round(r.x);d.y=Math.round(LOS-Math.round(1.5*YD_V));}}
+function alignOver(d,r){if(!d||!r)return;var lev=Math.round(0.6*YD)*(r.x<ballX?1:-1);var dep=isDeepDefender(d)?5.5:(d.label==='NICK'||d.label==='SS')?4:3;d.x=Math.round(r.x+lev);d.y=Math.round(LOS-dep*YD_V);}
 function manAlign(extra){
   var cbs=defByLabel('CB').sort(function(a,b){return a.x-b.x;});
   var recs=getReceivers();if(!recs.length)return;
@@ -933,53 +949,57 @@ function setCov(p,role,rxY,ryY,cx,cy){
   if(!p)return;
   var ph=(isDeepRole(role)||(role==='Man'&&isDeepDefender(p)))?'both':'pass';
   clearForPhase(p.id,ph);
-  var ox=(cx==null?p.x:cx),oy=(cy==null?p.y:cy);
-  var a={pid:p.id,phase:ph,kind:'cover',role:role,tx:Math.round(ox),ty:Math.round(oy)};
-  if(ZONECOV[role]){a.shape='circle';a.rx=Math.round(rxY);a.ry=Math.round(ryY);}
+  var a={pid:p.id,phase:ph,kind:'cover',role:role,tx:p.x,ty:p.y};
+  if(ZONECOV[role]){a.shape='circle';a.rx=Math.round(rxY);a.ry=Math.round(ryY);a.tx=Math.round(cx==null?p.x:cx);a.ty=Math.round(cy==null?p.y-ryY:cy);}
   else if(role==='Man'){var rec=nearestRec(p);if(rec){a.targetPid=rec.id;a.role='Man '+rec.label;a.tx=rec.x;a.ty=rec.y;}else{var tm=targetForRole(p,'Man');a.tx=Math.round(tm.x);a.ty=Math.round(tm.y);}}
   else{var t=targetForRole(p,role);a.tx=Math.round(t.x);a.ty=Math.round(t.y);a.curve=!!t.curve;}
   assigns.push(a);
 }
-function applyCoverage(scheme){
+function applyCoverage(scheme,internal){
   if(!scheme)return;
-  saveH();
+  curCov=scheme;
+  if(!internal)saveH();
   assigns=assigns.filter(function(a){return a.kind!=='cover';});
   var recs=getReceivers();
   var loX=recs.length?recs[0].x:Math.round(W*0.14),hiX=recs.length?recs[recs.length-1].x:Math.round(W*0.86);
   var span=Math.max(Math.round(W*0.32),hiX-loX);
+  var hash=ballX<W*0.44?-1:(ballX>W*0.56?1:0);
+  var rR=recs.filter(function(r){return r.x>ballX;}).length,rL=recs.filter(function(r){return r.x<ballX;}).length;
+  var strong=hash!==0?-hash:(rR>=rL?1:-1);
   var cbs=defByLabel('CB').sort(function(a,b){return a.x-b.x;});
   var fs=defByLabel('FS')[0],ss=defByLabel('SS')[0],mike=defByLabel('MIKE')[0],will=defByLabel('WILL')[0],nick=defByLabel('NICK')[0];
   function P(p,x,y){if(p){p.x=Math.round(x);p.y=Math.round(y);}}
   var deepY=LOS-Math.round(14*YD_V),offY=LOS-Math.round(7*YD_V),uy=LOS-Math.round(5*YD_V),midY=LOS-Math.round(10*YD_V);
   var dR=Math.round(W*0.095),dRy=Math.round(5*YD_V),uR=Math.round(W*0.07),uRy=Math.round(3.2*YD_V),qR=Math.round(W*0.08),hR=Math.round(W*0.13);
-  var inL=ballX-Math.round(span*0.2),inR=ballX+Math.round(span*0.2),clL=loX+Math.round(span*0.16),clR=hiX-Math.round(span*0.16);
+  var clL=loX+Math.round(span*0.16),clR=hiX-Math.round(span*0.16),strongCl=strong>0?clR:clL,weakCl=strong>0?clL:clR;
+  var wx=will?will.x:ballX-Math.round(3.5*YD),mx=mike?mike.x:ballX+Math.round(1.5*YD);
   if(scheme==='3'){
     P(cbs[0],loX,offY);P(fs,ballX,deepY);P(cbs[1],hiX,offY);
-    P(nick,clL,uy);P(will,inL,uy);P(mike,inR,uy);P(ss,clR,uy);
+    P(nick,strongCl,uy);P(ss,weakCl,uy);P(will,wx,uy);P(mike,mx,uy);
     setCov(cbs[0],'Deep ⅓',dR,dRy,loX,deepY);setCov(fs,'Deep ⅓',dR,dRy);setCov(cbs[1],'Deep ⅓',dR,dRy,hiX,deepY);
-    setCov(nick,'Curl/Flat',uR,uRy);setCov(will,'Hook',uR,uRy);setCov(mike,'Hook',uR,uRy);setCov(ss,'Curl/Flat',uR,uRy);
+    setCov(nick,'Curl/Flat',uR,uRy);setCov(ss,'Curl/Flat',uR,uRy);setCov(will,'Hook',uR,uRy);setCov(mike,'Hook',uR,uRy);
   }else if(scheme==='2'){
     P(cbs[0],loX,offY);P(cbs[1],hiX,offY);
     P(fs,ballX-Math.round(span*0.26),deepY);P(ss,ballX+Math.round(span*0.26),deepY);
-    P(will,clL,uy);P(nick,clR,uy);P(mike,ballX,midY);
+    P(nick,strongCl,uy);P(will,wx,uy);P(mike,ballX,midY);
     setCov(cbs[0],'Flat',uR,uRy);setCov(cbs[1],'Flat',uR,uRy);
     setCov(fs,'Deep ½',hR,dRy);setCov(ss,'Deep ½',hR,dRy);
-    setCov(will,'Hook/Curl',uR,uRy);setCov(nick,'Hook/Curl',uR,uRy);
+    setCov(nick,'Hook',uR,uRy);setCov(will,'Hook',uR,uRy);
     setCov(mike,'Deep Mid',Math.round(W*0.085),Math.round(4*YD_V));
   }else if(scheme==='4'){
     P(cbs[0],loX,offY);P(cbs[1],hiX,offY);
     P(fs,ballX-Math.round(span*0.2),deepY);P(ss,ballX+Math.round(span*0.2),deepY);
-    P(will,clL,uy);P(mike,ballX,uy);P(nick,clR,uy);
+    P(nick,strongCl,uy);P(will,wx,uy);P(mike,mx,uy);
     setCov(cbs[0],'Deep ¼',qR,dRy,loX,deepY);setCov(cbs[1],'Deep ¼',qR,dRy,hiX,deepY);
     setCov(fs,'Deep ¼',qR,dRy);setCov(ss,'Deep ¼',qR,dRy);
-    setCov(will,'Quarter Flat',uR,uRy);setCov(mike,'Hook',uR,uRy);setCov(nick,'Quarter Flat',uR,uRy);
+    setCov(nick,'Quarter Flat',uR,uRy);setCov(will,'Quarter Flat',uR,uRy);setCov(mike,'Hook',uR,uRy);
   }else if(scheme==='palm'){
     P(cbs[0],loX,offY);P(cbs[1],hiX,offY);
     P(fs,ballX-Math.round(span*0.2),deepY);P(ss,ballX+Math.round(span*0.2),deepY);
-    P(will,clL,uy);P(mike,ballX,uy);P(nick,clR,uy);
+    P(nick,strongCl,uy);P(will,wx,uy);P(mike,mx,uy);
     setCov(cbs[0],'Wall 2',uR,uRy);setCov(cbs[1],'Wall 2',uR,uRy);
     setCov(fs,'Deep ¼',qR,dRy);setCov(ss,'Deep ¼',qR,dRy);
-    setCov(will,'Hook/Curl',uR,uRy);setCov(mike,'Match 3',uR,uRy);setCov(nick,'Hook/Curl',uR,uRy);
+    setCov(nick,'Hook/Curl',uR,uRy);setCov(will,'Hook/Curl',uR,uRy);setCov(mike,'Match 3',uR,uRy);
   }else if(scheme==='1'){
     P(fs,ballX,deepY);setCov(fs,'Deep MOF',hR,dRy);
     manCover(true);
