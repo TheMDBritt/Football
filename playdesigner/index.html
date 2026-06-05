@@ -224,23 +224,31 @@ function drawBall(){
 function R(){return Math.max(8,Math.round(W/70));}
 function fillTextU(s,x,y){if(defView){ctx.save();ctx.translate(x,y);ctx.scale(1,-1);ctx.fillText(s,0,0);ctx.restore();}else ctx.fillText(s,x,y);}
 
+function nearestDist(pl){var m=1e9;players.forEach(function(o){if(o!==pl){var d=Math.hypot(o.x-pl.x,o.y-pl.y);if(d<m)m=d;}});return m;}
 function drawPlayer(pl){
-  var r=R();
+  var R0=R(),r=R0,nd=nearestDist(pl);
+  if(nd<2*R0+2)r=Math.max(Math.round(R0*0.62),Math.floor(nd/2-1));
   ctx.save();
+  ctx.shadowColor='rgba(0,0,0,0.45)';ctx.shadowBlur=Math.max(2,Math.round(R0*0.22));ctx.shadowOffsetY=(defView?-1:1)*Math.max(1,Math.round(R0*0.14));
   ctx.fillStyle=pl.color;
-  ctx.strokeStyle=pl.locked?'rgba(255,255,255,0.3)':'rgba(255,255,255,0.85)';
-  ctx.lineWidth=pl.locked?1:1.5;
-  if(pl.shape==='sq'){ctx.fillRect(pl.x-r,pl.y-r,r*2,r*2);ctx.strokeRect(pl.x-r,pl.y-r,r*2,r*2);}
-  else{ctx.beginPath();ctx.arc(pl.x,pl.y,r,0,Math.PI*2);ctx.fill();ctx.stroke();}
+  if(pl.shape==='sq'){ctx.fillRect(pl.x-r,pl.y-r,r*2,r*2);}
+  else{ctx.beginPath();ctx.arc(pl.x,pl.y,r,0,Math.PI*2);ctx.fill();}
+  ctx.shadowColor='transparent';ctx.shadowBlur=0;ctx.shadowOffsetY=0;
+  ctx.strokeStyle=pl.locked?'rgba(255,255,255,0.35)':'rgba(255,255,255,0.9)';ctx.lineWidth=pl.locked?1:1.5;
+  if(pl.shape==='sq'){ctx.strokeRect(pl.x-r,pl.y-r,r*2,r*2);}
+  else{ctx.beginPath();ctx.arc(pl.x,pl.y,r,0,Math.PI*2);ctx.stroke();}
   ctx.fillStyle='#fff';
-  ctx.font='bold '+Math.max(7,Math.round(r*0.85))+'px sans-serif';
+  var fsz=Math.max(7,Math.round(r*0.92));ctx.font='bold '+fsz+'px sans-serif';
   ctx.textAlign='center';ctx.textBaseline='middle';
-  fillTextU(pl.label,pl.x,pl.y+0.5);
+  var maxW=r*1.7,tw=ctx.measureText(pl.label).width;
+  if(tw>maxW){fsz=Math.max(6,Math.floor(fsz*maxW/tw));ctx.font='bold '+fsz+'px sans-serif';}
+  fillTextU(pl.label,pl.x,pl.y);
   if(pl.dl){
-    ctx.fillStyle='rgba(255,215,80,0.75)';
-    ctx.font=Math.max(7,Math.round(r*0.75))+'px sans-serif';
-    ctx.textBaseline='top';
-    fillTextU(pl.dl,pl.x,pl.y+r+2);
+    ctx.fillStyle='rgba(255,215,80,0.85)';
+    ctx.font=Math.max(7,Math.round(R0*0.62))+'px sans-serif';
+    ctx.textBaseline='middle';
+    var off=r+Math.round(R0*0.62);
+    fillTextU(pl.dl,pl.x,defView?(pl.y-off):(pl.y+off));
   }
   ctx.restore();
 }
@@ -741,10 +749,10 @@ function drawAssign(a){
     ctx.save();
     ctx.strokeStyle=col;ctx.globalAlpha=0.45;ctx.lineWidth=1.5;ctx.setLineDash([2,3]);
     ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(a.tx,a.ty);ctx.stroke();
-    ctx.globalAlpha=1;ctx.setLineDash([5,4]);
+    ctx.globalAlpha=0.8;ctx.setLineDash([5,4]);
     ctx.beginPath();ctx.ellipse(a.tx,a.ty,a.rx||Math.round(W*0.08),a.ry||Math.round(4.5*YD_V),0,0,Math.PI*2);
-    ctx.lineWidth=2;ctx.stroke();ctx.setLineDash([]);
-    ctx.fillStyle=col;ctx.font='bold '+Math.max(9,Math.round(W/88))+'px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.lineWidth=1.5;ctx.stroke();ctx.setLineDash([]);ctx.globalAlpha=1;
+    ctx.fillStyle=col;ctx.font='bold '+Math.max(9,Math.round(W/90))+'px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
     fillTextU(a.role,a.tx,a.ty);
     ctx.restore();
     return;
@@ -921,11 +929,12 @@ function manAlign(extra){
   var ds=extra.filter(Boolean);
   rem.forEach(function(rc,j){if(ds[j])alignOver(ds[j],rc);});
 }
-function setCov(p,role,rxY,ryY){
+function setCov(p,role,rxY,ryY,cx,cy){
   if(!p)return;
   var ph=(isDeepRole(role)||(role==='Man'&&isDeepDefender(p)))?'both':'pass';
   clearForPhase(p.id,ph);
-  var a={pid:p.id,phase:ph,kind:'cover',role:role,tx:p.x,ty:p.y};
+  var ox=(cx==null?p.x:cx),oy=(cy==null?p.y:cy);
+  var a={pid:p.id,phase:ph,kind:'cover',role:role,tx:Math.round(ox),ty:Math.round(oy)};
   if(ZONECOV[role]){a.shape='circle';a.rx=Math.round(rxY);a.ry=Math.round(ryY);}
   else if(role==='Man'){var rec=nearestRec(p);if(rec){a.targetPid=rec.id;a.role='Man '+rec.label;a.tx=rec.x;a.ty=rec.y;}else{var tm=targetForRole(p,'Man');a.tx=Math.round(tm.x);a.ty=Math.round(tm.y);}}
   else{var t=targetForRole(p,role);a.tx=Math.round(t.x);a.ty=Math.round(t.y);a.curve=!!t.curve;}
@@ -935,37 +944,44 @@ function applyCoverage(scheme){
   if(!scheme)return;
   saveH();
   assigns=assigns.filter(function(a){return a.kind!=='cover';});
-  var dy=LOS-Math.round(13*YD_V),uy=LOS-Math.round(6*YD_V),fy=LOS-Math.round(4*YD_V);
+  var recs=getReceivers();
+  var loX=recs.length?recs[0].x:Math.round(W*0.14),hiX=recs.length?recs[recs.length-1].x:Math.round(W*0.86);
+  var span=Math.max(Math.round(W*0.32),hiX-loX);
   var cbs=defByLabel('CB').sort(function(a,b){return a.x-b.x;});
   var fs=defByLabel('FS')[0],ss=defByLabel('SS')[0],mike=defByLabel('MIKE')[0],will=defByLabel('WILL')[0],nick=defByLabel('NICK')[0];
   function P(p,x,y){if(p){p.x=Math.round(x);p.y=Math.round(y);}}
-  var dR=Math.round(W*0.12),dRy=Math.round(6*YD_V),uR=Math.round(W*0.09),uRy=Math.round(4*YD_V),qR=Math.round(W*0.1),hR=Math.round(W*0.18);
+  var deepY=LOS-Math.round(14*YD_V),offY=LOS-Math.round(7*YD_V),uy=LOS-Math.round(5*YD_V),midY=LOS-Math.round(10*YD_V);
+  var dR=Math.round(W*0.095),dRy=Math.round(5*YD_V),uR=Math.round(W*0.07),uRy=Math.round(3.2*YD_V),qR=Math.round(W*0.08),hR=Math.round(W*0.13);
+  var inL=ballX-Math.round(span*0.2),inR=ballX+Math.round(span*0.2),clL=loX+Math.round(span*0.16),clR=hiX-Math.round(span*0.16);
   if(scheme==='3'){
-    P(cbs[0],W*0.16,dy);P(fs,W*0.5,dy);P(cbs[1],W*0.84,dy);
-    P(nick,W*0.25,uy);P(will,W*0.4,uy);P(mike,W*0.6,uy);P(ss,W*0.75,uy);
-    setCov(cbs[0],'Deep ⅓',dR,dRy);setCov(fs,'Deep ⅓',dR,dRy);setCov(cbs[1],'Deep ⅓',dR,dRy);
+    P(cbs[0],loX,offY);P(fs,ballX,deepY);P(cbs[1],hiX,offY);
+    P(nick,clL,uy);P(will,inL,uy);P(mike,inR,uy);P(ss,clR,uy);
+    setCov(cbs[0],'Deep ⅓',dR,dRy,loX,deepY);setCov(fs,'Deep ⅓',dR,dRy);setCov(cbs[1],'Deep ⅓',dR,dRy,hiX,deepY);
     setCov(nick,'Curl/Flat',uR,uRy);setCov(will,'Hook',uR,uRy);setCov(mike,'Hook',uR,uRy);setCov(ss,'Curl/Flat',uR,uRy);
   }else if(scheme==='2'){
-    P(fs,W*0.28,dy);P(ss,W*0.72,dy);P(cbs[0],W*0.12,fy);P(cbs[1],W*0.88,fy);
-    P(will,W*0.32,uy);P(nick,W*0.68,uy);P(mike,W*0.5,LOS-Math.round(9*YD_V));
-    setCov(fs,'Deep ½',hR,dRy);setCov(ss,'Deep ½',hR,dRy);
+    P(cbs[0],loX,offY);P(cbs[1],hiX,offY);
+    P(fs,ballX-Math.round(span*0.26),deepY);P(ss,ballX+Math.round(span*0.26),deepY);
+    P(will,clL,uy);P(nick,clR,uy);P(mike,ballX,midY);
     setCov(cbs[0],'Flat',uR,uRy);setCov(cbs[1],'Flat',uR,uRy);
+    setCov(fs,'Deep ½',hR,dRy);setCov(ss,'Deep ½',hR,dRy);
     setCov(will,'Hook/Curl',uR,uRy);setCov(nick,'Hook/Curl',uR,uRy);
-    setCov(mike,'Deep Mid',Math.round(W*0.11),Math.round(5*YD_V));
+    setCov(mike,'Deep Mid',Math.round(W*0.085),Math.round(4*YD_V));
   }else if(scheme==='4'){
-    P(cbs[0],W*0.14,dy);P(fs,W*0.38,dy);P(ss,W*0.62,dy);P(cbs[1],W*0.86,dy);
-    P(will,W*0.3,uy);P(mike,W*0.5,uy);P(nick,W*0.7,uy);
-    setCov(cbs[0],'Deep ¼',qR,dRy);setCov(fs,'Deep ¼',qR,dRy);setCov(ss,'Deep ¼',qR,dRy);setCov(cbs[1],'Deep ¼',qR,dRy);
+    P(cbs[0],loX,offY);P(cbs[1],hiX,offY);
+    P(fs,ballX-Math.round(span*0.2),deepY);P(ss,ballX+Math.round(span*0.2),deepY);
+    P(will,clL,uy);P(mike,ballX,uy);P(nick,clR,uy);
+    setCov(cbs[0],'Deep ¼',qR,dRy,loX,deepY);setCov(cbs[1],'Deep ¼',qR,dRy,hiX,deepY);
+    setCov(fs,'Deep ¼',qR,dRy);setCov(ss,'Deep ¼',qR,dRy);
     setCov(will,'Quarter Flat',uR,uRy);setCov(mike,'Hook',uR,uRy);setCov(nick,'Quarter Flat',uR,uRy);
   }else if(scheme==='palm'){
-    var qy=LOS-Math.round(12*YD_V),cy=LOS-Math.round(7*YD_V);
-    P(cbs[0],W*0.15,cy);P(cbs[1],W*0.85,cy);P(fs,W*0.35,qy);P(ss,W*0.65,qy);
-    P(will,W*0.33,uy);P(mike,W*0.5,uy);P(nick,W*0.67,uy);
+    P(cbs[0],loX,offY);P(cbs[1],hiX,offY);
+    P(fs,ballX-Math.round(span*0.2),deepY);P(ss,ballX+Math.round(span*0.2),deepY);
+    P(will,clL,uy);P(mike,ballX,uy);P(nick,clR,uy);
     setCov(cbs[0],'Wall 2',uR,uRy);setCov(cbs[1],'Wall 2',uR,uRy);
     setCov(fs,'Deep ¼',qR,dRy);setCov(ss,'Deep ¼',qR,dRy);
     setCov(will,'Hook/Curl',uR,uRy);setCov(mike,'Match 3',uR,uRy);setCov(nick,'Hook/Curl',uR,uRy);
   }else if(scheme==='1'){
-    P(fs,W*0.5,dy);setCov(fs,'Deep MOF',hR,dRy);
+    P(fs,ballX,deepY);setCov(fs,'Deep MOF',hR,dRy);
     manCover(true);
   }else if(scheme==='0'){
     manCover(false);
