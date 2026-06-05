@@ -495,6 +495,7 @@ document.getElementById('sel-hash').addEventListener('change',function(){
   var dx=nx-ballX,lo=R(),hi=W-R();
   var def=players.filter(function(p){return p.color===D;});
   def.forEach(function(p){p.x=Math.max(lo,Math.min(hi,p.x+dx));});
+  zones.forEach(function(z){z.x=Math.max(lo,Math.min(hi,z.x+dx));});
   ballX=nx;
   if(curForm&&F[curForm]){players=F[curForm]().concat(def);applyWRSplits();ensureIds();remapManTargets();}
   if(curCov)applyCoverage(curCov,true);
@@ -1051,6 +1052,10 @@ function applyCoverage(scheme,internal){
     if(fs){fs.x=ballX-strong*Math.round(span*0.22);fs.y=deepY;}
     if(ss){ss.x=ballX+strong*Math.round(span*0.22);ss.y=deepY;}
   }
+  assigns.forEach(function(a){
+    if(a.shape!=='circle')return;
+    for(var i=0;i<zones.length;i++){if(zones[i].label===a.role){zones[i].x=a.tx;zones[i].y=a.ty;break;}}
+  });
   render();
 }
 
