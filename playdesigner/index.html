@@ -101,7 +101,7 @@ canvas{display:block;width:100%;touch-action:none;cursor:crosshair}
       <option value="">-- preset --</option>
       <option value="0">Cover 0</option>
       <option value="1">Cover 1</option>
-      <option value="2">Cover 2</option>
+      <option value="2">Tampa 2</option>
       <option value="3">Cover 3</option>
       <option value="4">Cover 4</option>
       <option value="palm">Cover 4 Palms</option>
@@ -664,9 +664,9 @@ function isDeepDefender(p){return !!p&&(p.label==='CB'||p.label==='FS'||p.label=
 function normalizeAssigns(){assigns.forEach(function(a){if(a.kind==='runfit')a.kind='run';else if(a.kind==='passrush')a.kind='rush';else if(a.kind==='coverage')a.kind='cover';if(!a.phase)a.phase=(a.kind==='run')?'run':'pass';});}
 var RUNMENU=['A gap','B gap','C gap','D gap','Force','Contain','Spill','Fill','Cutback','Box/Alley','A-gap blitz','B-gap blitz','C-gap blitz','Edge blitz','Custom…'];
 var RUSHMENU=['Contain','A rush','B rush','C rush','Slant ←','Slant →','Loop ←','Loop →','TEX — DE in / DT contain','ET — DT in / DE contain','Twist — DTs cross','Custom…'];
-var COVERMENU=['Deep ⅓','Deep ½','Deep ¼','Deep MOF','Flat','Curl/Flat','Hook/Curl','Hook','Seam/Wall','Wall 2','Match 3','Man','Spy','Robber','A-gap blitz','B-gap blitz','C-gap blitz','Edge blitz','Custom…'];
+var COVERMENU=['Deep ⅓','Deep ½','Deep ¼','Deep Mid','Deep MOF','Flat','Quarter Flat','Curl/Flat','Hook/Curl','Hook','Seam/Wall','Wall 2','Match 3','Man','Spy','Robber','Hole','A-gap blitz','B-gap blitz','C-gap blitz','Edge blitz','Custom…'];
 var STUNTS={'TEX — DE in / DT contain':1,'ET — DT in / DE contain':1,'Twist — DTs cross':1};
-var ZONECOV={'Deep ⅓':1,'Deep ½':1,'Deep ¼':1,'Deep MOF':1,'Flat':1,'Curl/Flat':1,'Hook/Curl':1,'Hook':1,'Seam/Wall':1,'Wall 2':1,'Match 3':1};
+var ZONECOV={'Deep ⅓':1,'Deep ½':1,'Deep ¼':1,'Deep Mid':1,'Deep MOF':1,'Flat':1,'Quarter Flat':1,'Curl/Flat':1,'Hook/Curl':1,'Hook':1,'Seam/Wall':1,'Wall 2':1,'Match 3':1,'Hole':1};
 
 function playerById(id){for(var i=0;i<players.length;i++){if(players[i].id===id)return players[i];}return null;}
 function defByLabel(lb){return players.filter(function(p){return p.color===D&&p.label===lb;});}
@@ -701,6 +701,9 @@ function targetForRole(p,role){
     'Blitz':{x:ballX+s*Ag,y:L},
     'Wall 2':{x:p.x+s*Math.round(2*YD),y:L-Math.round(5*YD_V)},
     'Match 3':{x:ballX,y:L-Math.round(5*YD_V)},
+    'Hole':{x:ballX,y:L-Math.round(5*YD_V)},
+    'Quarter Flat':{x:p.x+s*Math.round(3*YD),y:L-Math.round(6*YD_V)},
+    'Deep Mid':{x:W/2,y:L-Math.round(12*YD_V)},
     'A-gap blitz':{x:ballX+s*Ag,y:L},'B-gap blitz':{x:ballX+s*Bg,y:L},
     'C-gap blitz':{x:ballX+s*Cg,y:L},'Edge blitz':{x:ballX+s*(Dg+r*1.5),y:L-Math.round(1*YD_V)}
   };
@@ -833,10 +836,34 @@ function openManPicker(pi){
     if(rec)addManAssign(pi,rec);
   });
 }
+function clearManOn(pid){assigns=assigns.filter(function(a){return a.targetPid!==pid;});}
 function addManAssign(pi,rec){
-  var p=players[pi],ph=isDeepDefender(p)?'both':'pass';saveH();clearForPhase(p.id,ph);
+  var p=players[pi],ph=isDeepDefender(p)?'both':'pass';saveH();clearForPhase(p.id,ph);clearManOn(rec.id);
   assigns.push({pid:p.id,phase:ph,kind:'cover',role:'Man '+rec.label,targetPid:rec.id,tx:rec.x,ty:rec.y});
   closeMenu();render();
+}
+function manOn(d,rec){if(!d||!rec)return;var ph=isDeepDefender(d)?'both':'pass';clearForPhase(d.id,ph);clearManOn(rec.id);assigns.push({pid:d.id,phase:ph,kind:'cover',role:'Man '+rec.label,targetPid:rec.id,tx:rec.x,ty:rec.y});}
+function manCover(hole){
+  var midX=W*0.5,holeY=LOS-Math.round(5*YD_V);
+  var cbs=defByLabel('CB').sort(function(a,b){return a.x-b.x;});
+  var nick=defByLabel('NICK')[0],ss=defByLabel('SS')[0],will=defByLabel('WILL')[0],mike=defByLabel('MIKE')[0],fs=defByLabel('FS')[0];
+  var wrs=getReceivers(),backs=players.filter(function(p){return p.color===O&&p.y>LOS+R()*2.2;});
+  var rb=backs[0]||null,lbs=[will,mike].filter(Boolean),used={};
+  function mark(d){if(d)used[d.id]=1;}
+  if(rb&&lbs.length){lbs.sort(function(a,b){return Math.abs(a.x-rb.x)-Math.abs(b.x-rb.x);});alignOver(lbs[0],rb);manOn(lbs[0],rb);mark(lbs[0]);}
+  var wrUsed={};
+  if(wrs.length&&cbs[0]){alignOver(cbs[0],wrs[0]);manOn(cbs[0],wrs[0]);mark(cbs[0]);wrUsed[0]=1;}
+  if(wrs.length>1&&cbs[1]){var Li=wrs.length-1;alignOver(cbs[1],wrs[Li]);manOn(cbs[1],wrs[Li]);mark(cbs[1]);wrUsed[Li]=1;}
+  var pool=[nick,ss].concat(lbs);if(!hole&&fs)pool.push(fs);
+  pool=pool.filter(function(d){return d&&!used[d.id];});
+  var pp=0;
+  for(var i=0;i<wrs.length;i++){if(wrUsed[i])continue;var d=pool[pp++];if(d){alignOver(d,wrs[i]);manOn(d,wrs[i]);mark(d);}}
+  var leftovers=hole?[nick,ss,will,mike]:[nick,ss,will,mike,fs];
+  leftovers.forEach(function(d){
+    if(!d||used[d.id])return;
+    if(hole){d.x=Math.round(midX);d.y=Math.round(holeY);setCov(d,'Hole',Math.round(W*0.09),Math.round(4*YD_V));mark(d);}
+    else{var t=targetForRole(d,'Edge blitz');clearForPhase(d.id,'both');assigns.push({pid:d.id,phase:'both',kind:'run',role:'Edge blitz',tx:Math.round(t.x),ty:Math.round(t.y)});mark(d);}
+  });
 }
 function openAssignFor(pi){
   var p=players[pi];
@@ -920,15 +947,16 @@ function applyCoverage(scheme){
     setCov(nick,'Curl/Flat',uR,uRy);setCov(will,'Hook',uR,uRy);setCov(mike,'Hook',uR,uRy);setCov(ss,'Curl/Flat',uR,uRy);
   }else if(scheme==='2'){
     P(fs,W*0.28,dy);P(ss,W*0.72,dy);P(cbs[0],W*0.12,fy);P(cbs[1],W*0.88,fy);
-    P(will,W*0.34,uy);P(mike,W*0.5,uy);P(nick,W*0.66,uy);
+    P(will,W*0.32,uy);P(nick,W*0.68,uy);P(mike,W*0.5,LOS-Math.round(9*YD_V));
     setCov(fs,'Deep ½',hR,dRy);setCov(ss,'Deep ½',hR,dRy);
     setCov(cbs[0],'Flat',uR,uRy);setCov(cbs[1],'Flat',uR,uRy);
-    setCov(will,'Hook/Curl',uR,uRy);setCov(mike,'Hook',uR,uRy);setCov(nick,'Hook/Curl',uR,uRy);
+    setCov(will,'Hook/Curl',uR,uRy);setCov(nick,'Hook/Curl',uR,uRy);
+    setCov(mike,'Deep Mid',Math.round(W*0.11),Math.round(5*YD_V));
   }else if(scheme==='4'){
     P(cbs[0],W*0.14,dy);P(fs,W*0.38,dy);P(ss,W*0.62,dy);P(cbs[1],W*0.86,dy);
     P(will,W*0.3,uy);P(mike,W*0.5,uy);P(nick,W*0.7,uy);
     setCov(cbs[0],'Deep ¼',qR,dRy);setCov(fs,'Deep ¼',qR,dRy);setCov(ss,'Deep ¼',qR,dRy);setCov(cbs[1],'Deep ¼',qR,dRy);
-    setCov(will,'Curl',uR,uRy);setCov(mike,'Hook',uR,uRy);setCov(nick,'Curl',uR,uRy);
+    setCov(will,'Quarter Flat',uR,uRy);setCov(mike,'Hook',uR,uRy);setCov(nick,'Quarter Flat',uR,uRy);
   }else if(scheme==='palm'){
     var qy=LOS-Math.round(12*YD_V),cy=LOS-Math.round(7*YD_V);
     P(cbs[0],W*0.15,cy);P(cbs[1],W*0.85,cy);P(fs,W*0.35,qy);P(ss,W*0.65,qy);
@@ -938,11 +966,9 @@ function applyCoverage(scheme){
     setCov(will,'Hook/Curl',uR,uRy);setCov(mike,'Match 3',uR,uRy);setCov(nick,'Hook/Curl',uR,uRy);
   }else if(scheme==='1'){
     P(fs,W*0.5,dy);setCov(fs,'Deep MOF',hR,dRy);
-    manAlign([ss,nick,will,mike]);
-    [cbs[0],cbs[1],ss,nick,will,mike].forEach(function(d){setCov(d,'Man');});
+    manCover(true);
   }else if(scheme==='0'){
-    manAlign([ss,nick,will,mike,fs]);
-    [cbs[0],cbs[1],ss,nick,will,mike,fs].forEach(function(d){setCov(d,'Man');});
+    manCover(false);
   }
   render();
 }
