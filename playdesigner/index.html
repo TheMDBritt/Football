@@ -449,18 +449,25 @@ function remapManTargets(){
   });
 }
 function applyWRSplits(){
+  // X and Z always align to the bottom of the numbers (~9 yds), measured from the
+  // sidelines (W-relative) — never from the ball — so they hold their split on any hash.
   var nubL=Math.round(9*YD),nubR=W-nubL;
   var rtX=ballX+OL_G+OL_T,ltX=ballX-OL_G-OL_T;
   var byLbl={};
   players.forEach(function(p){if(p.color===O)byLbl[p.label]=p;});
-  var X=byLbl.X,Z=byLbl.Z,Y=byLbl.Y,H=byLbl.H,A=byLbl.A;
+  var X=byLbl.X,Z=byLbl.Z,Y=byLbl.Y,Hp=byLbl.H,A=byLbl.A;
   var rThresh=rtX+Math.round(5*YD),lThresh=ltX-Math.round(5*YD);
+  // detached off-the-ball slots get re-spaced once they clear the tackle by ~2 yds —
+  // this rescues the #3 trips receiver, which on a hash lands between the box thresholds
+  // and would otherwise strand on top of the OL instead of spacing out with the trips.
+  var slotR=rtX+Math.round(2*YD),slotL=ltX-Math.round(2*YD);
   var rInners=[],lInners=[];
-  [Y,H,A].forEach(function(p){
+  [Y,Hp,A].forEach(function(p){
     if(!p||Math.abs(p.y-LOS)>R())return;
     if(p===X||p===Z)return;
-    if(p.x>rThresh)rInners.push(p);
-    else if(p.x<lThresh)lInners.push(p);
+    var slot=(p.y-LOS)>4;
+    if(p.x>rThresh||(slot&&p.x>slotR))rInners.push(p);
+    else if(p.x<lThresh||(slot&&p.x<slotL))lInners.push(p);
   });
   rInners.sort(function(a,b){return b.x-a.x;});
   lInners.sort(function(a,b){return a.x-b.x;});
