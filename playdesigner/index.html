@@ -75,6 +75,7 @@ canvas{display:block;width:100%;touch-action:none;cursor:crosshair}
         <option value="pistol_2x2">Pistol 2x2</option>
       </optgroup>
     </select>
+    <button id="btn-flip" title="Flip formation strength to the other side">Flip</button>
     <div class="sep"></div>
     <label>Ball:</label>
     <select id="sel-hash">
@@ -142,7 +143,7 @@ canvas{display:block;width:100%;touch-action:none;cursor:crosshair}
 var C=document.getElementById('c'),ctx=C.getContext('2d');
 var W,H,YD,YD_V,LOS,LH_X,RH_X,hashPos,SL_WR,SLOT_IN,QB_Y,RB_Y;
 var OL_G=22,OL_T=22;
-var ballX=0,play='pass',defView=false,curCov='',curForm='';
+var ballX=0,play='pass',defView=false,curCov='',curForm='',flip=false;
 var players=[],routes=[],hist=[],assigns=[],zones=[];
 var uid=0;function nextId(){return ++uid;}
 var tool='assign',drawing=false,curPts=[],dragIdx=-1,dragOff={x:0,y:0},arcStart=null,dragAssign=-1,dragMode='move',zoneDrag=null,stemDrag=-1,lastClient={x:0,y:0},lastTap=0;
@@ -449,35 +450,111 @@ function remapManTargets(){
   });
 }
 function applyWRSplits(){
-  // X and Z always align to the bottom of the numbers (~9 yds), measured from the
-  // sidelines (W-relative) — never from the ball — so they hold their split on any hash.
-  var nubL=Math.round(9*YD),nubR=W-nubL;
+  // HS numbers sit ~6 yds from each sideline (W-relative), so X/Z hold their split on any
+  // hash. Strength side follows the manual Flip toggle, not the hash — the offense declares
+  // strength; the defense reacts to field/boundary in alignDBsToWRs()/applyCoverage().
+  var nubL=Math.round(W*0.115),nubR=W-Math.round(W*0.115);
+  var xNub=flip?nubR:nubL,zNub=flip?nubL:nubR;
   var rtX=ballX+OL_G+OL_T,ltX=ballX-OL_G-OL_T;
   var byLbl={};
   players.forEach(function(p){if(p.color===O)byLbl[p.label]=p;});
   var X=byLbl.X,Z=byLbl.Z,Y=byLbl.Y,Hp=byLbl.H,A=byLbl.A;
-  var rThresh=rtX+Math.round(5*YD),lThresh=ltX-Math.round(5*YD);
-  // detached off-the-ball slots get re-spaced once they clear the tackle by ~2 yds —
-  // this rescues the #3 trips receiver, which on a hash lands between the box thresholds
-  // and would otherwise strand on top of the OL instead of spacing out with the trips.
+  if(X)X.x=xNub;
+  if(Z)Z.x=zNub;
+  var rThresh=rtX+Math.round(3*YD),lThresh=ltX-Math.round(3*YD);
+  // A detached off-the-ball slot re-spaces once it clears the tackle by ~2 yds. This catches
+  // the #3 trips receiver, which on a hash lands between the box thresholds and would
+  // otherwise strand on the OL instead of spacing 4 yds inside the rest of the trips.
   var slotR=rtX+Math.round(2*YD),slotL=ltX-Math.round(2*YD);
   var rInners=[],lInners=[];
   [Y,Hp,A].forEach(function(p){
-    if(!p||Math.abs(p.y-LOS)>R())return;
-    if(p===X||p===Z)return;
+    if(!p||Math.abs(p.y-LOS)>R()*2.5)return;
     var slot=(p.y-LOS)>4;
     if(p.x>rThresh||(slot&&p.x>slotR))rInners.push(p);
     else if(p.x<lThresh||(slot&&p.x<slotL))lInners.push(p);
   });
   rInners.sort(function(a,b){return b.x-a.x;});
   lInners.sort(function(a,b){return a.x-b.x;});
-  if(X)X.x=nubL;
-  if(Z)Z.x=nubR;
-  if(rInners.length>=2)rInners.forEach(function(p,i){p.x=(Z?Z.x:nubR)-Math.round(((i+1)*4)*YD);});
-  if(lInners.length>=2)lInners.forEach(function(p,i){p.x=(X?X.x:nubL)+Math.round(((i+1)*4)*YD);});
-  var cbs=defByLabel('CB').sort(function(a,b){return a.x-b.x;});
-  if(cbs[0]&&X)cbs[0].x=X.x;
-  if(cbs[1]&&Z)cbs[1].x=Z.x;
+  var rightAnchor=(Z&&Z.x>W/2)?Z.x:(X&&X.x>W/2)?X.x:nubR;
+  var leftAnchor=(X&&X.x<W/2)?X.x:(Z&&Z.x<W/2)?Z.x:nubL;
+  rInners.forEach(function(p,i){p.x=Math.round(rightAnchor-(i+1)*4*YD);});
+  lInners.forEach(function(p,i){p.x=Math.round(leftAnchor+(i+1)*4*YD);});
+}
+// Flip formation strength: mirror the skill players (not the OL/QB) about the ball.
+function mirrorSkill(){
+  players.forEach(function(p){
+    if(p.color!==O)return;
+    if(p.label==='C'||p.label==='LG'||p.label==='RG'||p.label==='LT'||p.label==='RT')return;
+    p.x=2*ballX-p.x;
+  });
+}
+// After WRs settle, re-fit the secondary to where they actually landed: CBs over the
+// outside WRs, nickel to the field-side slot, safeties spaced by receiver distribution.
+function alignDBsToWRs(){
+  var byLbl={};
+  players.forEach(function(p){if(p.color===O)byLbl[p.label]=p;});
+  var X=byLbl.X,Z=byLbl.Z;
+  var cbs=players.filter(function(p){return p.color===D&&p.label==='CB';});
+  cbs.sort(function(a,b){return a.x-b.x;});
+  // Left CB mirrors leftmost WR, right CB mirrors rightmost WR
+  var leftWR=(X&&X.x<W/2)?X:(Z&&Z.x<W/2)?Z:null;
+  var rightWR=(Z&&Z.x>W/2)?Z:(X&&X.x>W/2)?X:null;
+  var covDepth=Math.round(7*YD_V);
+  if(cbs[0]&&leftWR){cbs[0].x=leftWR.x;cbs[0].y=LOS-covDepth;}
+  if(cbs[1]&&rightWR){cbs[1].x=rightWR.x;cbs[1].y=LOS-covDepth;}
+  var isMOF=Math.abs(ballX-W/2)<W*0.08;
+  var onRightHash=ballX>W/2+W*0.08;
+  var fieldLeft=onRightHash;
+  // Nickel aligns to the field-side slot receiver
+  var nick=players.filter(function(p){return p.color===D&&p.label==='NICK';})[0];
+  if(nick){
+    var slots=players.filter(function(p){
+      return p.color===O&&p.label!=='QB'&&p.label!=='RB'&&p.label!=='FB'&&p.label!=='C'&&p.label!=='LG'&&p.label!=='RG'&&p.label!=='LT'&&p.label!=='RT'&&p.label!=='X'&&p.label!=='Z';
+    });
+    var fieldSlots=slots.filter(function(p){
+      return isMOF?true:(fieldLeft?p.x<W/2:p.x>W/2);
+    });
+    if(fieldSlots.length){
+      fieldSlots.sort(function(a,b){return Math.abs(a.x-ballX)-Math.abs(b.x-ballX);});
+      var target=fieldSlots[0];
+      nick.x=Math.round(target.x);
+      nick.y=LOS-Math.round(4.5*YD_V);
+    }
+  }
+  // Safeties: spaced by receiver distribution per side; field wider, boundary tighter
+  var fs=players.filter(function(p){return p.color===D&&p.label==='FS';})[0];
+  var ss=players.filter(function(p){return p.color===D&&p.label==='SS';})[0];
+  var safetyDepth=LOS-Math.round(12*YD_V);
+  var offPlayers=players.filter(function(p){
+    return p.color===O&&p.label!=='QB'&&p.label!=='RB'&&p.label!=='FB'&&p.label!=='C'&&p.label!=='LG'&&p.label!=='RG'&&p.label!=='LT'&&p.label!=='RT';
+  });
+  var leftRecs=offPlayers.filter(function(p){return p.x<ballX;});
+  var rightRecs=offPlayers.filter(function(p){return p.x>ballX;});
+  var tripsLeft=leftRecs.length>=3;
+  var tripsRight=rightRecs.length>=3;
+  var widestLeft=leftRecs.length?leftRecs.reduce(function(a,b){return a.x<b.x?a:b;}):null;
+  var widestRight=rightRecs.length?rightRecs.reduce(function(a,b){return a.x>b.x?a:b;}):null;
+  var insideShade=Math.round(3*YD);
+  var leftSafetyX=widestLeft?Math.round(widestLeft.x+insideShade):Math.round(ballX-W*0.18);
+  var rightSafetyX=widestRight?Math.round(widestRight.x-insideShade):Math.round(ballX+W*0.18);
+  if(!isMOF){
+    if(fieldLeft){
+      if(tripsLeft)leftSafetyX=Math.round(widestLeft.x+insideShade*0.5);
+      if(tripsRight)rightSafetyX=Math.round(widestRight.x-insideShade*0.5);
+      if(fs){fs.x=leftSafetyX;fs.y=safetyDepth;}
+      if(ss){ss.x=rightSafetyX;ss.y=safetyDepth;}
+    }else{
+      if(tripsRight)rightSafetyX=Math.round(widestRight.x-insideShade*0.5);
+      if(tripsLeft)leftSafetyX=Math.round(widestLeft.x+insideShade*0.5);
+      if(fs){fs.x=rightSafetyX;fs.y=safetyDepth;}
+      if(ss){ss.x=leftSafetyX;ss.y=safetyDepth;}
+    }
+  }else{
+    if(tripsLeft)leftSafetyX=Math.round(widestLeft.x+insideShade*0.5);
+    if(tripsRight)rightSafetyX=Math.round(widestRight.x-insideShade*0.5);
+    if(fs){fs.x=leftSafetyX;fs.y=safetyDepth;}
+    if(ss){ss.x=rightSafetyX;ss.y=safetyDepth;}
+  }
 }
 function loadForm(key){
   if(!key||!F[key])return;
@@ -486,14 +563,30 @@ function loadForm(key){
   var def=players.filter(function(p){return p.color===D;});
   if(!def.length)def=autoDef(key);
   players=F[key]().concat(def);
+  if(flip)mirrorSkill();
   applyWRSplits();
   routes=[];
   ensureIds();remapManTargets();
+  alignDBsToWRs();
   if(curCov)applyCoverage(curCov,true);
   render();
 }
 
 document.getElementById('sel-form').addEventListener('change',function(){loadForm(this.value);});
+
+document.getElementById('btn-flip').addEventListener('click',function(){
+  if(!curForm||!F[curForm])return;
+  saveH();
+  flip=!flip;
+  this.classList.toggle('act',flip);
+  var def=players.filter(function(p){return p.color===D;});
+  players=F[curForm]().concat(def);
+  if(flip)mirrorSkill();
+  applyWRSplits();ensureIds();remapManTargets();
+  alignDBsToWRs();
+  if(curCov)applyCoverage(curCov,true);
+  render();
+});
 
 document.getElementById('sel-hash').addEventListener('change',function(){
   var nx=hashPos[this.value]||W/2;
@@ -504,7 +597,8 @@ document.getElementById('sel-hash').addEventListener('change',function(){
   def.forEach(function(p){p.x=Math.max(lo,Math.min(hi,p.x+dx));});
   zones.forEach(function(z){z.x=Math.max(lo,Math.min(hi,z.x+dx));});
   ballX=nx;
-  if(curForm&&F[curForm]){players=F[curForm]().concat(def);applyWRSplits();ensureIds();remapManTargets();}
+  if(curForm&&F[curForm]){players=F[curForm]().concat(def);if(flip)mirrorSkill();applyWRSplits();ensureIds();remapManTargets();}
+  alignDBsToWRs();
   if(curCov)applyCoverage(curCov,true);
   render();
 });
@@ -622,7 +716,7 @@ function savePlay(){
   for(var i=0;i<plays.length;i++){if(plays[i].name===name){idx=i;break;}}
   if(idx<0&&plays.length>=MAXPLAYS){alert('Maximum of '+MAXPLAYS+' saved plays reached. Delete one first.');return;}
   if(idx>=0&&!confirm('A play named "'+name+'" already exists. Overwrite it?'))return;
-  var play={name:name,ts:Date.now(),ballX:ballX,players:players,routes:routes,notes:notesEl.value,assigns:assigns,zones:zones,defView:defView};
+  var play={name:name,ts:Date.now(),ballX:ballX,players:players,routes:routes,notes:notesEl.value,assigns:assigns,zones:zones,defView:defView,flip:flip};
   if(idx>=0)plays[idx]=play;else plays.push(play);
   setPlays(plays);
 }
@@ -636,6 +730,7 @@ function loadPlay(p){
   zones=JSON.parse(JSON.stringify(p.zones||[]));
   ensureIds();normalizeAssigns();
   defView=!!p.defView;document.getElementById('btn-defview').classList.toggle('act',defView);
+  flip=!!p.flip;var fb=document.getElementById('btn-flip');if(fb)fb.classList.toggle('act',flip);
   notesEl.value=p.notes||'';
   try{localStorage.setItem(NKEY,notesEl.value);}catch(e){}
   render();
