@@ -90,10 +90,10 @@ canvas{display:block;width:100%;touch-action:none;cursor:crosshair}
       <option value="pass">Pass</option>
       <option value="run">Run</option>
     </select>
+    <button id="btn-defview">Def View</button>
     <div class="sep"></div>
     <button id="t-assign" class="act">Assign</button>
     <button id="t-route">Draw</button>
-    <button id="t-arrow">Arrow</button>
     <button id="t-block">Block</button>
     <button id="t-erase">Erase</button>
     <div class="sep"></div>
@@ -143,10 +143,10 @@ canvas{display:block;width:100%;touch-action:none;cursor:crosshair}
 var C=document.getElementById('c'),ctx=C.getContext('2d');
 var W,H,YD,YD_V,LOS,LH_X,RH_X,hashPos,SL_WR,SLOT_IN,QB_Y,RB_Y;
 var OL_G=22,OL_T=22;
-var ballX=0,play='pass';
+var ballX=0,play='pass',defView=false;
 var players=[],routes=[],hist=[],assigns=[],zones=[];
 var uid=0;function nextId(){return ++uid;}
-var tool='assign',drawing=false,curPts=[],dragIdx=-1,dragOff={x:0,y:0},arcStart=null,dragAssign=-1,dragMode='move',zoneDrag=null,stemDrag=-1,lastClient={x:0,y:0};
+var tool='assign',drawing=false,curPts=[],dragIdx=-1,dragOff={x:0,y:0},arcStart=null,dragAssign=-1,dragMode='move',zoneDrag=null,stemDrag=-1,lastClient={x:0,y:0},lastTap=0;
 
 function saveH(){hist.push({p:JSON.stringify(players),r:JSON.stringify(routes),a:JSON.stringify(assigns),z:JSON.stringify(zones)});if(hist.length>50)hist.shift();}
 
@@ -194,8 +194,8 @@ function drawField(){
     if(py<16||py>H-16)continue;
     var dist=Math.abs(d)%100, n=dist<=50?50-dist:dist-50;
     if(n<=0)continue;
-    ctx.fillText(''+n,24,py);
-    ctx.fillText(''+n,W-24,py);
+    fillTextU(''+n,24,py);
+    fillTextU(''+n,W-24,py);
   }
   // line of scrimmage (ball spot)
   ctx.strokeStyle='rgba(255,255,255,0.7)';ctx.lineWidth=2.5;
@@ -223,6 +223,7 @@ function drawBall(){
 }
 
 function R(){return Math.max(8,Math.round(W/70));}
+function fillTextU(s,x,y){if(defView){ctx.save();ctx.translate(x,y);ctx.scale(1,-1);ctx.fillText(s,0,0);ctx.restore();}else ctx.fillText(s,x,y);}
 
 function drawPlayer(pl){
   var r=R();
@@ -235,12 +236,12 @@ function drawPlayer(pl){
   ctx.fillStyle='#fff';
   ctx.font='bold '+Math.max(7,Math.round(r*0.85))+'px sans-serif';
   ctx.textAlign='center';ctx.textBaseline='middle';
-  ctx.fillText(pl.label,pl.x,pl.y+0.5);
+  fillTextU(pl.label,pl.x,pl.y+0.5);
   if(pl.dl){
     ctx.fillStyle='rgba(255,215,80,0.75)';
     ctx.font=Math.max(7,Math.round(r*0.75))+'px sans-serif';
     ctx.textBaseline='top';
-    ctx.fillText(pl.dl,pl.x,pl.y+r+2);
+    fillTextU(pl.dl,pl.x,pl.y+r+2);
   }
   ctx.restore();
 }
@@ -261,6 +262,7 @@ function drawArc(x1,y1,x2,y2,col){
 }
 
 function render(){
+  ctx.save();if(defView){ctx.translate(0,H);ctx.scale(1,-1);}
   drawField();
   zones.forEach(drawZone);
   routes.forEach(function(r){
@@ -279,6 +281,7 @@ function render(){
   assigns.forEach(function(a){if(play==='run'&&a.phase==='pass')return;if(play==='pass'&&a.phase==='run')return;drawAssign(a);});
   players.forEach(drawPlayer);
   drawBall();
+  ctx.restore();
 }
 
 function mk(x,y,lb,sh,col,lk,dl){return{id:nextId(),x:x,y:y,label:lb,shape:sh||'circle',color:col,locked:!!lk,dl:dl||null};}
@@ -447,9 +450,10 @@ document.getElementById('sel-hash').addEventListener('change',function(){
   ballX=nx;render();
 });
 
-['assign','route','arrow','block','erase'].forEach(function(t){
+['assign','route','block','erase'].forEach(function(t){
   document.getElementById('t-'+t).addEventListener('click',function(){setTool(t);});
 });
+document.getElementById('btn-defview').addEventListener('click',function(){defView=!defView;this.classList.toggle('act',defView);render();});
 
 document.getElementById('btn-undo').addEventListener('click',function(){
   if(hist.length){var s=hist.pop();players=JSON.parse(s.p);routes=JSON.parse(s.r);assigns=s.a?JSON.parse(s.a):[];zones=s.z?JSON.parse(s.z):[];ensureIds();normalizeAssigns();render();}
@@ -459,7 +463,8 @@ document.getElementById('btn-save').addEventListener('click',function(){exportPN
 
 function gp(e){
   var r=C.getBoundingClientRect(),s=e.touches?e.touches[0]:e;
-  return{x:(s.clientX-r.left)*(C.width/r.width),y:(s.clientY-r.top)*(C.height/r.height)};
+  var x=(s.clientX-r.left)*(C.width/r.width),y=(s.clientY-r.top)*(C.height/r.height);
+  return{x:x,y:defView?H-y:y};
 }
 function hitP(x,y){
   var r=R()+2;
@@ -492,18 +497,17 @@ function onDown(pos){
     var re=hitR(pos.x,pos.y);if(re>=0){routes.splice(re,1);render();return;}
     return;
   }
+  var pi=hitP(pos.x,pos.y);
+  if(pi>=0){dragIdx=pi;dragOff={x:pos.x-players[pi].x,y:pos.y-players[pi].y};return;}
   if(tool==='assign'){
     var hs=hitStem(pos.x,pos.y);if(hs>=0){stemDrag=hs;return;}
     var g=hitAssignGrab(pos.x,pos.y);if(g){dragAssign=g.i;dragMode=g.mode;return;}
     var zh=hitZone(pos.x,pos.y);if(zh>=0){zoneDrag={i:zh,mode:zoneVal(zones[zh],pos.x,pos.y)>0.6?'resize':'move',ox:pos.x-zones[zh].x,oy:pos.y-zones[zh].y};return;}
-    var pm=hitP(pos.x,pos.y);if(pm>=0){openAssignFor(pm);return;}
     return;
   }
-  var pi=hitP(pos.x,pos.y);
-  if(pi>=0){dragIdx=pi;dragOff={x:pos.x-players[pi].x,y:pos.y-players[pi].y};return;}
   drawing=true;
   if(tool==='route')curPts=[pos];
-  else arcStart=pos;
+  else if(tool==='block')arcStart=pos;
 }
 function onMove(pos){
   if(dragIdx>=0){players[dragIdx].x=pos.x-dragOff.x;players[dragIdx].y=pos.y-dragOff.y;render();return;}
@@ -514,8 +518,9 @@ function onMove(pos){
   if(tool==='route'){curPts.push(pos);render();}
   else if(arcStart){
     render();
-    if(tool==='arrow')drawArrow(arcStart.x,arcStart.y,pos.x,pos.y,'#5af');
-    else drawArc(arcStart.x,arcStart.y,pos.x,pos.y,'#5af');
+    ctx.save();if(defView){ctx.translate(0,H);ctx.scale(1,-1);}
+    drawArc(arcStart.x,arcStart.y,pos.x,pos.y,'#5af');
+    ctx.restore();
   }
 }
 function onUp(pos){
@@ -532,9 +537,11 @@ function onUp(pos){
 C.addEventListener('mousedown',function(e){lastClient={x:e.clientX,y:e.clientY};onDown(gp(e));});
 C.addEventListener('mousemove',function(e){onMove(gp(e));});
 C.addEventListener('mouseup',function(e){onUp(gp(e));});
-C.addEventListener('touchstart',function(e){e.preventDefault();var tt=e.touches[0];if(tt)lastClient={x:tt.clientX,y:tt.clientY};onDown(gp(e));},{passive:false});
+C.addEventListener('touchstart',function(e){e.preventDefault();var tt=e.touches[0];if(tt)lastClient={x:tt.clientX,y:tt.clientY};var p=gp(e),now=Date.now();
+  if(now-lastTap<320){var pi=hitP(p.x,p.y);if(pi>=0){openAssignFor(pi);lastTap=0;return;}var ai=hitAssign(p.x,p.y);if(ai>=0){openAssignEdit(ai);lastTap=0;return;}}
+  lastTap=now;onDown(p);},{passive:false});
 C.addEventListener('touchmove',function(e){e.preventDefault();onMove(gp(e));},{passive:false});
-C.addEventListener('touchend',function(e){e.preventDefault();var t=e.changedTouches[0],r=C.getBoundingClientRect();onUp({x:(t.clientX-r.left)*(C.width/r.width),y:(t.clientY-r.top)*(C.height/r.height)});},{passive:false});
+C.addEventListener('touchend',function(e){e.preventDefault();var t=e.changedTouches[0],r=C.getBoundingClientRect();var ty=(t.clientY-r.top)*(C.height/r.height);onUp({x:(t.clientX-r.left)*(C.width/r.width),y:defView?H-ty:ty});},{passive:false});
 
 window.addEventListener('resize',function(){setSize();if(players.length)render();});
 setSize();
@@ -555,7 +562,7 @@ function savePlay(){
   for(var i=0;i<plays.length;i++){if(plays[i].name===name){idx=i;break;}}
   if(idx<0&&plays.length>=MAXPLAYS){alert('Maximum of '+MAXPLAYS+' saved plays reached. Delete one first.');return;}
   if(idx>=0&&!confirm('A play named "'+name+'" already exists. Overwrite it?'))return;
-  var play={name:name,ts:Date.now(),ballX:ballX,players:players,routes:routes,notes:notesEl.value,assigns:assigns,zones:zones};
+  var play={name:name,ts:Date.now(),ballX:ballX,players:players,routes:routes,notes:notesEl.value,assigns:assigns,zones:zones,defView:defView};
   if(idx>=0)plays[idx]=play;else plays.push(play);
   setPlays(plays);
 }
@@ -568,6 +575,7 @@ function loadPlay(p){
   assigns=JSON.parse(JSON.stringify(p.assigns||[]));
   zones=JSON.parse(JSON.stringify(p.zones||[]));
   ensureIds();normalizeAssigns();
+  defView=!!p.defView;document.getElementById('btn-defview').classList.toggle('act',defView);
   notesEl.value=p.notes||'';
   try{localStorage.setItem(NKEY,notesEl.value);}catch(e){}
   render();
@@ -718,12 +726,13 @@ function drawTag(x,y,text,col){
   var tw=ctx.measureText(text).width+8,th=Math.max(13,Math.round(W/68)),ty=y-th;
   ctx.fillStyle=tagLum(col)>0.6?'rgba(20,20,20,0.85)':'rgba(245,245,245,0.92)';
   ctx.fillRect(x-tw/2,ty-th/2,tw,th);
-  ctx.fillStyle=col;ctx.fillText(text,x,ty);
+  ctx.fillStyle=col;fillTextU(text,x,ty);
   ctx.restore();
 }
 function drawAssign(a){
   var p=playerById(a.pid);if(!p)return;
   var col=kindCol(a.kind);
+  if(a.targetPid!=null){var rec=playerById(a.targetPid);if(rec){a.tx=rec.x;a.ty=rec.y;drawArrow(p.x,p.y,rec.x,rec.y,col);drawTag(rec.x,rec.y,a.role,col);}return;}
   if(a.shape==='circle'){
     ctx.save();
     ctx.strokeStyle=col;ctx.globalAlpha=0.45;ctx.lineWidth=1.5;ctx.setLineDash([2,3]);
@@ -732,7 +741,7 @@ function drawAssign(a){
     ctx.beginPath();ctx.ellipse(a.tx,a.ty,a.rx||Math.round(W*0.08),a.ry||Math.round(4.5*YD_V),0,0,Math.PI*2);
     ctx.lineWidth=2;ctx.stroke();ctx.setLineDash([]);
     ctx.fillStyle=col;ctx.font='bold '+Math.max(9,Math.round(W/88))+'px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
-    ctx.fillText(a.role,a.tx,a.ty);
+    fillTextU(a.role,a.tx,a.ty);
     ctx.restore();
     return;
   }
@@ -748,7 +757,7 @@ function drawZone(z){
   ctx.fillStyle='rgba(245,248,250,0.95)';
   ctx.font='bold '+Math.max(9,Math.round(W/82))+'px sans-serif';
   ctx.textAlign='center';ctx.textBaseline='middle';
-  ctx.fillText(z.label,z.x,z.y);
+  fillTextU(z.label,z.x,z.y);
   ctx.restore();
 }
 
@@ -808,8 +817,23 @@ function buildMenu(title,roles,onPick){
 }
 function chooseAssign(pi,role,menuKind){
   if(role==='Custom…'){var v=prompt('Label:');if(v===null)return;v=v.trim();if(!v)return;addAssign(pi,v,menuKind);return;}
+  if(role==='Man'){openManPicker(pi);return;}
   if(STUNTS[role]){addStunt(pi,role);return;}
   addAssign(pi,role,menuKind);
+}
+function nearestRec(p){var rc=getReceivers();if(!rc.length)return null;var b=rc[0],bd=1e9;rc.forEach(function(q){var d=Math.abs(q.x-p.x);if(d<bd){bd=d;b=q;}});return b;}
+function openManPicker(pi){
+  var recs=getReceivers();
+  if(!recs.length){addAssign(pi,'Man','cover');return;}
+  buildMenu(players[pi].label+' · Man vs',recs.map(function(r){return r.label;}),function(lbl){
+    var rec=null;for(var i=0;i<recs.length;i++){if(recs[i].label===lbl){rec=recs[i];break;}}
+    if(rec)addManAssign(pi,rec);
+  });
+}
+function addManAssign(pi,rec){
+  var p=players[pi];saveH();clearForPhase(p.id,'pass');
+  assigns.push({pid:p.id,phase:'pass',kind:'cover',role:'Man '+rec.label,targetPid:rec.id,tx:rec.x,ty:rec.y});
+  closeMenu();render();
 }
 function openAssignFor(pi){
   var p=players[pi];
@@ -827,7 +851,7 @@ function hitAssignGrab(x,y){
   }return null;
 }
 function closeMenu(){ctxMenu.classList.remove('open');}
-function setTool(t){tool=t;closeMenu();document.querySelectorAll('#tb button').forEach(function(b){b.classList.remove('act');});var btn=document.getElementById('t-'+t);if(btn)btn.classList.add('act');}
+function setTool(t){tool=t;closeMenu();document.querySelectorAll('#tb button').forEach(function(b){b.classList.remove('act');});var btn=document.getElementById('t-'+t);if(btn)btn.classList.add('act');document.getElementById('btn-defview').classList.toggle('act',defView);}
 document.getElementById('sel-play').addEventListener('change',function(){play=this.value;closeMenu();render();});
 document.getElementById('btn-addzone').addEventListener('click',function(){saveH();zones.push({x:Math.round(W/2),y:Math.round(LOS-Math.round(8*YD_V)),rx:Math.round(W*0.1),ry:Math.round(5*YD_V),label:'Zone'});setTool('assign');render();});
 function openAssignEdit(ai){
@@ -845,10 +869,14 @@ function openAssignEdit(ai){
 C.addEventListener('dblclick',function(e){
   lastClient={x:e.clientX,y:e.clientY};
   var pos=gp(e);
+  var pi=hitP(pos.x,pos.y);if(pi>=0){openAssignFor(pi);return;}
   var ai=hitAssign(pos.x,pos.y);if(ai>=0){openAssignEdit(ai);return;}
   var zi=hitZone(pos.x,pos.y);if(zi>=0){var nv=prompt('Zone label:',zones[zi].label);if(nv!==null){saveH();zones[zi].label=nv;render();}}
 });
-document.addEventListener('mousedown',function(e){if(ctxMenu.classList.contains('open')&&!ctxMenu.contains(e.target)&&e.target!==C)closeMenu();});
+function maybeCloseMenu(e){if(ctxMenu.classList.contains('open')&&!ctxMenu.contains(e.target))closeMenu();}
+document.addEventListener('mousedown',maybeCloseMenu);
+document.addEventListener('touchstart',maybeCloseMenu,{passive:true});
+document.addEventListener('keydown',function(e){if(e.key==='Escape'){closeMenu();closeModal();}});
 
 document.getElementById('sel-cov').addEventListener('change',function(){applyCoverage(this.value);this.value='';});
 function getReceivers(){return players.filter(function(p){return p.color===O&&p.y<=LOS+R()*2.2;}).sort(function(a,b){return a.x-b.x;});}
@@ -867,6 +895,7 @@ function setCov(p,role,rxY,ryY){
   if(!p)return;clearForPhase(p.id,'pass');
   var a={pid:p.id,phase:'pass',kind:'cover',role:role,tx:p.x,ty:p.y};
   if(ZONECOV[role]){a.shape='circle';a.rx=Math.round(rxY);a.ry=Math.round(ryY);}
+  else if(role==='Man'){var rec=nearestRec(p);if(rec){a.targetPid=rec.id;a.role='Man '+rec.label;a.tx=rec.x;a.ty=rec.y;}else{var tm=targetForRole(p,'Man');a.tx=Math.round(tm.x);a.ty=Math.round(tm.y);}}
   else{var t=targetForRole(p,role);a.tx=Math.round(t.x);a.ty=Math.round(t.y);a.curve=!!t.curve;}
   assigns.push(a);
 }
