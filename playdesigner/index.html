@@ -1000,7 +1000,7 @@ function applyCoverage(scheme,internal){
   var span=Math.max(Math.round(W*0.32),hiX-loX);
   var hash=ballX<W*0.44?-1:(ballX>W*0.56?1:0);
   var rR=recs.filter(function(r){return r.x>ballX;}).length,rL=recs.filter(function(r){return r.x<ballX;}).length;
-  var strong=hash!==0?-hash:(rR>=rL?1:-1);
+  var strong=hash!==0?hash:(rR>=rL?1:-1);
   var cbs=defByLabel('CB').sort(function(a,b){return a.x-b.x;});
   var fs=defByLabel('FS')[0],ss=defByLabel('SS')[0],mike=defByLabel('MIKE')[0],will=defByLabel('WILL')[0],nick=defByLabel('NICK')[0];
   function P(p,x,y){if(p){p.x=Math.round(x);p.y=Math.round(y);}}
