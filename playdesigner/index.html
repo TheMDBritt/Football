@@ -659,6 +659,8 @@ var RFCOL='#e23b3b',PRCOL='#101010',CVCOL='#f5f5f5';
 function kindCol(k){return (k==='run'||k==='runfit')?RFCOL:(k==='rush'||k==='passrush')?PRCOL:CVCOL;}
 function clearForPhase(pid,phase){assigns=assigns.filter(function(a){if(a.pid!==pid)return true;if(phase==='both')return false;if(phase==='run')return !(a.phase==='run'||a.phase==='both');return !(a.phase==='pass'||a.phase==='both');});}
 function isDL(p){return p.label==='3T'||p.label==='1T'||p.label==='DE'||p.label==='NT';}
+function isDeepRole(r){return /^Deep/.test(r||'');}
+function isDeepDefender(p){return !!p&&(p.label==='CB'||p.label==='FS'||p.label==='SS');}
 function normalizeAssigns(){assigns.forEach(function(a){if(a.kind==='runfit')a.kind='run';else if(a.kind==='passrush')a.kind='rush';else if(a.kind==='coverage')a.kind='cover';if(!a.phase)a.phase=(a.kind==='run')?'run':'pass';});}
 var RUNMENU=['A gap','B gap','C gap','D gap','Force','Contain','Spill','Fill','Cutback','Box/Alley','A-gap blitz','B-gap blitz','C-gap blitz','Edge blitz','Custom…'];
 var RUSHMENU=['Contain','A rush','B rush','C rush','Slant ←','Slant →','Loop ←','Loop →','TEX — DE in / DT contain','ET — DT in / DE contain','Twist — DTs cross','Custom…'];
@@ -775,6 +777,7 @@ function hitZone(x,y){for(var i=zones.length-1;i>=0;i--){if(zoneVal(zones[i],x,y
 function addAssign(pi,role,menuKind){
   var p=players[pi],blitz=/blitz/i.test(role);
   var phase=blitz?'both':(menuKind==='run'?'run':'pass');
+  if(!blitz&&menuKind==='cover'&&isDeepRole(role))phase='both';
   var kind=blitz?'run':menuKind;
   saveH();clearForPhase(p.id,phase);
   var t=targetForRole(p,role);
@@ -821,8 +824,9 @@ function chooseAssign(pi,role,menuKind){
   addAssign(pi,role,menuKind);
 }
 function nearestRec(p){var rc=getReceivers();if(!rc.length)return null;var b=rc[0],bd=1e9;rc.forEach(function(q){var d=Math.abs(q.x-p.x);if(d<bd){bd=d;b=q;}});return b;}
+function getEligibles(){return players.filter(function(p){return p.color===O;}).sort(function(a,b){return a.x-b.x;});}
 function openManPicker(pi){
-  var recs=getReceivers();
+  var recs=getEligibles();
   if(!recs.length){addAssign(pi,'Man','cover');return;}
   buildMenu(players[pi].label+' · Man vs',recs.map(function(r){return r.label;}),function(lbl){
     var rec=null;for(var i=0;i<recs.length;i++){if(recs[i].label===lbl){rec=recs[i];break;}}
@@ -830,8 +834,8 @@ function openManPicker(pi){
   });
 }
 function addManAssign(pi,rec){
-  var p=players[pi];saveH();clearForPhase(p.id,'pass');
-  assigns.push({pid:p.id,phase:'pass',kind:'cover',role:'Man '+rec.label,targetPid:rec.id,tx:rec.x,ty:rec.y});
+  var p=players[pi],ph=isDeepDefender(p)?'both':'pass';saveH();clearForPhase(p.id,ph);
+  assigns.push({pid:p.id,phase:ph,kind:'cover',role:'Man '+rec.label,targetPid:rec.id,tx:rec.x,ty:rec.y});
   closeMenu();render();
 }
 function openAssignFor(pi){
@@ -891,8 +895,10 @@ function manAlign(extra){
   rem.forEach(function(rc,j){if(ds[j])alignOver(ds[j],rc);});
 }
 function setCov(p,role,rxY,ryY){
-  if(!p)return;clearForPhase(p.id,'pass');
-  var a={pid:p.id,phase:'pass',kind:'cover',role:role,tx:p.x,ty:p.y};
+  if(!p)return;
+  var ph=(isDeepRole(role)||(role==='Man'&&isDeepDefender(p)))?'both':'pass';
+  clearForPhase(p.id,ph);
+  var a={pid:p.id,phase:ph,kind:'cover',role:role,tx:p.x,ty:p.y};
   if(ZONECOV[role]){a.shape='circle';a.rx=Math.round(rxY);a.ry=Math.round(ryY);}
   else if(role==='Man'){var rec=nearestRec(p);if(rec){a.targetPid=rec.id;a.role='Man '+rec.label;a.tx=rec.x;a.ty=rec.y;}else{var tm=targetForRole(p,'Man');a.tx=Math.round(tm.x);a.ty=Math.round(tm.y);}}
   else{var t=targetForRole(p,role);a.tx=Math.round(t.x);a.ty=Math.round(t.y);a.curve=!!t.curve;}
