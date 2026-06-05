@@ -976,7 +976,7 @@ function setCov(p,role,rxY,ryY,cx,cy){
   var ph=(isDeepRole(role)||(role==='Man'&&isDeepDefender(p)))?'both':'pass';
   clearForPhase(p.id,ph);
   var a={pid:p.id,phase:ph,kind:'cover',role:role,tx:p.x,ty:p.y};
-  if(ZONECOV[role]){a.shape='circle';a.rx=Math.round(rxY);a.ry=Math.round(ryY);a.tx=Math.round(cx==null?p.x:cx);a.ty=Math.round(cy==null?p.y-Math.round(ryY*1.25):cy);}
+  if(ZONECOV[role]){a.shape='circle';a.rx=Math.round(rxY);a.ry=Math.round(ryY);a.tx=Math.round(cx==null?p.x:cx);var off=isDeepRole(role)?Math.round(ryY*0.6):(Math.round(ryY)+R()+Math.round(0.6*YD_V));a.ty=Math.round(cy==null?p.y-off:cy);}
   else if(role==='Man'){var rec=nearestRec(p);if(rec){a.targetPid=rec.id;a.role='Man '+rec.label;a.tx=rec.x;a.ty=rec.y;}else{var tm=targetForRole(p,'Man');a.tx=Math.round(tm.x);a.ty=Math.round(tm.y);}}
   else{var t=targetForRole(p,role);a.tx=Math.round(t.x);a.ty=Math.round(t.y);a.curve=!!t.curve;}
   assigns.push(a);
@@ -996,16 +996,18 @@ function applyCoverage(scheme,internal){
   var fs=defByLabel('FS')[0],ss=defByLabel('SS')[0],mike=defByLabel('MIKE')[0],will=defByLabel('WILL')[0],nick=defByLabel('NICK')[0];
   function P(p,x,y){if(p){p.x=Math.round(x);p.y=Math.round(y);}}
   var deepY=LOS-Math.round(14*YD_V),offY=LOS-Math.round(7*YD_V),uy=LOS-Math.round(5*YD_V),midY=LOS-Math.round(10*YD_V);
+  var cbL=offY,cbR=offY;
+  if(hash<0){cbL=LOS-Math.round(5.5*YD_V);cbR=LOS-Math.round(8*YD_V);}else if(hash>0){cbR=LOS-Math.round(5.5*YD_V);cbL=LOS-Math.round(8*YD_V);}
   var dR=Math.round(W*0.095),dRy=Math.round(5*YD_V),uR=Math.round(W*0.07),uRy=Math.round(3.2*YD_V),qR=Math.round(W*0.08),hR=Math.round(W*0.13);
   var clL=loX+Math.round(span*0.16),clR=hiX-Math.round(span*0.16),strongCl=strong>0?clR:clL,weakCl=strong>0?clL:clR;
   var bxL=ballX-Math.round(span*0.13),bxR=ballX+Math.round(span*0.13);
   if(scheme==='3'){
-    P(cbs[0],loX,offY);P(fs,ballX,deepY);P(cbs[1],hiX,offY);
+    P(cbs[0],loX,cbL);P(fs,ballX,deepY);P(cbs[1],hiX,cbR);
     P(nick,strongCl,uy);P(ss,weakCl,uy);P(will,bxL,uy);P(mike,bxR,uy);
     setCov(cbs[0],'Deep ⅓',dR,dRy,loX,deepY);setCov(fs,'Deep ⅓',dR,dRy);setCov(cbs[1],'Deep ⅓',dR,dRy,hiX,deepY);
     setCov(nick,'Curl/Flat',uR,uRy);setCov(ss,'Curl/Flat',uR,uRy);setCov(will,'Hook',uR,uRy);setCov(mike,'Hook',uR,uRy);
   }else if(scheme==='2'){
-    P(cbs[0],loX,offY);P(cbs[1],hiX,offY);
+    P(cbs[0],loX,cbL);P(cbs[1],hiX,cbR);
     P(fs,ballX-Math.round(span*0.26),deepY);P(ss,ballX+Math.round(span*0.26),deepY);
     P(nick,strongCl,uy);P(will,weakCl,uy);P(mike,ballX,midY);
     setCov(cbs[0],'Flat',uR,uRy);setCov(cbs[1],'Flat',uR,uRy);
@@ -1013,14 +1015,14 @@ function applyCoverage(scheme,internal){
     setCov(nick,'Hook',uR,uRy);setCov(will,'Hook',uR,uRy);
     setCov(mike,'Deep Mid',Math.round(W*0.085),Math.round(4*YD_V));
   }else if(scheme==='4'){
-    P(cbs[0],loX,offY);P(cbs[1],hiX,offY);
+    P(cbs[0],loX,cbL);P(cbs[1],hiX,cbR);
     P(fs,ballX-Math.round(span*0.2),deepY);P(ss,ballX+Math.round(span*0.2),deepY);
     P(nick,strongCl,uy);P(will,weakCl,uy);P(mike,ballX,uy);
     setCov(cbs[0],'Deep ¼',qR,dRy,loX,deepY);setCov(cbs[1],'Deep ¼',qR,dRy,hiX,deepY);
     setCov(fs,'Deep ¼',qR,dRy);setCov(ss,'Deep ¼',qR,dRy);
     setCov(nick,'Quarter Flat',uR,uRy);setCov(will,'Quarter Flat',uR,uRy);setCov(mike,'Hook',uR,uRy);
   }else if(scheme==='palm'){
-    P(cbs[0],loX,offY);P(cbs[1],hiX,offY);
+    P(cbs[0],loX,cbL);P(cbs[1],hiX,cbR);
     P(fs,ballX-Math.round(span*0.2),deepY);P(ss,ballX+Math.round(span*0.2),deepY);
     P(nick,strongCl,uy);P(will,weakCl,uy);P(mike,ballX,uy);
     setCov(cbs[0],'Deep ¼',qR,dRy,loX,deepY);setCov(cbs[1],'Deep ¼',qR,dRy,hiX,deepY);
