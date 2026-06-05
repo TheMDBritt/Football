@@ -662,7 +662,7 @@ function isDL(p){return p.label==='3T'||p.label==='1T'||p.label==='DE'||p.label=
 function normalizeAssigns(){assigns.forEach(function(a){if(a.kind==='runfit')a.kind='run';else if(a.kind==='passrush')a.kind='rush';else if(a.kind==='coverage')a.kind='cover';if(!a.phase)a.phase=(a.kind==='run')?'run':'pass';});}
 var RUNMENU=['A gap','B gap','C gap','D gap','Force','Contain','Spill','Fill','Cutback','Box/Alley','A-gap blitz','B-gap blitz','C-gap blitz','Edge blitz','Custom…'];
 var RUSHMENU=['Contain','A rush','B rush','C rush','Slant ←','Slant →','Loop ←','Loop →','TEX — DE in / DT contain','ET — DT in / DE contain','Twist — DTs cross','Custom…'];
-var COVERMENU=['Deep ⅓','Deep ½','Deep ¼','Deep MOF','Flat','Curl/Flat','Hook/Curl','Hook','Seam/Wall','Wall 2','Match 3','Man','Spy','Robber','Blitz','Custom…'];
+var COVERMENU=['Deep ⅓','Deep ½','Deep ¼','Deep MOF','Flat','Curl/Flat','Hook/Curl','Hook','Seam/Wall','Wall 2','Match 3','Man','Spy','Robber','A-gap blitz','B-gap blitz','C-gap blitz','Edge blitz','Custom…'];
 var STUNTS={'TEX — DE in / DT contain':1,'ET — DT in / DE contain':1,'Twist — DTs cross':1};
 var ZONECOV={'Deep ⅓':1,'Deep ½':1,'Deep ¼':1,'Deep MOF':1,'Flat':1,'Curl/Flat':1,'Hook/Curl':1,'Hook':1,'Seam/Wall':1,'Wall 2':1,'Match 3':1};
 
