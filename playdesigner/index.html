@@ -466,8 +466,8 @@ function applyWRSplits(){
   lInners.sort(function(a,b){return a.x-b.x;});
   if(X)X.x=nubL;
   if(Z)Z.x=nubR;
-  rInners.forEach(function(p,i){p.x=(Z?Z.x:nubR)-Math.round(((i+1)*4)*YD);});
-  lInners.forEach(function(p,i){p.x=(X?X.x:nubL)+Math.round(((i+1)*4)*YD);});
+  if(rInners.length>=2)rInners.forEach(function(p,i){p.x=(Z?Z.x:nubR)-Math.round(((i+1)*4)*YD);});
+  if(lInners.length>=2)lInners.forEach(function(p,i){p.x=(X?X.x:nubL)+Math.round(((i+1)*4)*YD);});
   var cbs=defByLabel('CB').sort(function(a,b){return a.x-b.x;});
   if(cbs[0]&&X)cbs[0].x=X.x;
   if(cbs[1]&&Z)cbs[1].x=Z.x;
