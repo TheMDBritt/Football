@@ -448,6 +448,27 @@ function remapManTargets(){
     }
   });
 }
+function applyWRSplits(){
+  var nubL=Math.round(9*YD),nubR=W-nubL;
+  var rtX=ballX+OL_G+OL_T,ltX=ballX-OL_G-OL_T;
+  var byLbl={};
+  players.forEach(function(p){if(p.color===O)byLbl[p.label]=p;});
+  var X=byLbl.X,Z=byLbl.Z,Y=byLbl.Y,H=byLbl.H,A=byLbl.A;
+  var rThresh=rtX+Math.round(5*YD),lThresh=ltX-Math.round(5*YD);
+  var rInners=[],lInners=[];
+  [Y,H,A].forEach(function(p){
+    if(!p||Math.abs(p.y-LOS)>R())return;
+    if(p===X||p===Z)return;
+    if(p.x>rThresh)rInners.push(p);
+    else if(p.x<lThresh)lInners.push(p);
+  });
+  rInners.sort(function(a,b){return b.x-a.x;});
+  lInners.sort(function(a,b){return a.x-b.x;});
+  if(X)X.x=nubL;
+  if(Z)Z.x=nubR;
+  rInners.forEach(function(p,i){p.x=(Z?Z.x:nubR)-Math.round(((i+1)*4)*YD);});
+  lInners.forEach(function(p,i){p.x=(X?X.x:nubL)+Math.round(((i+1)*4)*YD);});
+}
 function loadForm(key){
   if(!key||!F[key])return;
   curForm=key;
@@ -455,6 +476,7 @@ function loadForm(key){
   var def=players.filter(function(p){return p.color===D;});
   if(!def.length)def=autoDef(key);
   players=F[key]().concat(def);
+  applyWRSplits();
   routes=[];
   ensureIds();remapManTargets();
   if(curCov)applyCoverage(curCov,true);
@@ -471,7 +493,7 @@ document.getElementById('sel-hash').addEventListener('change',function(){
   var def=players.filter(function(p){return p.color===D;});
   def.forEach(function(p){p.x=Math.max(lo,Math.min(hi,p.x+dx));});
   ballX=nx;
-  if(curForm&&F[curForm]){players=F[curForm]().concat(def);ensureIds();remapManTargets();}
+  if(curForm&&F[curForm]){players=F[curForm]().concat(def);applyWRSplits();ensureIds();remapManTargets();}
   if(curCov)applyCoverage(curCov,true);
   render();
 });
