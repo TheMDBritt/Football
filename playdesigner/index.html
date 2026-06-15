@@ -147,6 +147,17 @@ canvas{display:block;width:100%;touch-action:none;cursor:crosshair}
       <option value="fire_zone">Fire Zone (5)</option>
       <option value="cover0">Cover 0 (All-Out)</option>
     </select>
+    <label>Stunt:</label>
+    <select id="sel-stunt">
+      <option value="">-- line game --</option>
+      <option value="tex_strong">TEX (strong)</option>
+      <option value="tex_weak">TEX (weak)</option>
+      <option value="et_strong">ET (strong)</option>
+      <option value="et_weak">ET (weak)</option>
+      <option value="twist">Twist (DTs cross)</option>
+      <option value="pirate">Pirate (double TEX)</option>
+      <option value="lightning">Lightning (double ET)</option>
+    </select>
     <button id="btn-addzone">+ Zone</button>
     <div class="sep"></div>
     <button id="btn-undo">Undo</button>
@@ -1260,6 +1271,46 @@ function refitDefense(){
   if(curFront)applyFront(curFront,true);
   if(curPress)applyPressure(curPress,true);
   else if(curCov)applyCoverage(curCov,true);
+}
+
+/* ---- Team stunts / line games (one-click DL games) ---- */
+document.getElementById('sel-stunt').addEventListener('change',function(){applyTeamStunt(this.value);this.value='';});
+function gamePush(p,role,t,curve){if(p){clearForPhase(p.id,'pass');assigns.push({pid:p.id,phase:'pass',kind:'rush',role:role,tx:Math.round(t.x),ty:Math.round(t.y),curve:!!curve});}}
+// deFirst=true -> TEX (end crashes inside, tackle loops to contain); false -> ET (tackle in, end contains)
+function teGame(side,deFirst){
+  var r=R(),Dg=OL_G+OL_T+r*3.2,dt=null,dtd=1e9,de=null,ded=-1;
+  players.forEach(function(p){
+    if(p.color!==D)return;
+    if((p.label==='3T'||p.label==='1T')&&(p.x-ballX)*side>=0){var d=Math.abs(p.x-ballX);if(d<dtd){dtd=d;dt=p;}}
+    if(p.label==='DE'&&(p.x-ballX)*side>0){var e=Math.abs(p.x-ballX);if(e>ded){ded=e;de=p;}}
+  });
+  if(!dt||!de)return false;
+  var inside={x:ballX+side*OL_G*0.5,y:LOS};
+  var contain={x:ballX+side*(Dg+r*2),y:LOS-Math.round(1.5*YD_V)};
+  if(deFirst){gamePush(de,'crash',inside,false);gamePush(dt,'contain',contain,true);}
+  else{gamePush(dt,'crash',inside,false);gamePush(de,'contain',contain,true);}
+  return true;
+}
+function twistDTs(){
+  var t3=defByLabel('3T')[0],t1=defByLabel('1T')[0];if(!t3||!t1)return false;
+  gamePush(t3,'cross',{x:ballX+OL_G*0.5,y:LOS},true);
+  gamePush(t1,'cross',{x:ballX-OL_G*0.5,y:LOS},true);
+  return true;
+}
+var TEAMSTUNT={
+  tex_strong:function(s){return teGame(s,true);},
+  tex_weak:function(s){return teGame(-s,true);},
+  et_strong:function(s){return teGame(s,false);},
+  et_weak:function(s){return teGame(-s,false);},
+  twist:function(){return twistDTs();},
+  pirate:function(s){var a=teGame(s,true),b=teGame(-s,true);return a||b;},
+  lightning:function(s){var a=teGame(s,false),b=teGame(-s,false);return a||b;}
+};
+function applyTeamStunt(name){
+  if(!name||!TEAMSTUNT[name])return;
+  saveH();
+  TEAMSTUNT[name](frontDir());
+  render();
 }
 var manScheme='';
 function alignOver(d,r){if(!d||!r)return;var lev=Math.round(0.6*YD)*(r.x<ballX?1:-1);var dep;if(d.label==='CB')dep=manScheme==='0'?1.2:4;else if(d.label==='NICK'||d.label==='SS')dep=4;else dep=3;d.x=Math.round(r.x+lev);d.y=Math.round(LOS-dep*YD_V);}
