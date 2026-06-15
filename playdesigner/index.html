@@ -138,6 +138,15 @@ canvas{display:block;width:100%;touch-action:none;cursor:crosshair}
       <option value="4">Cover 4</option>
       <option value="palm">Cover 4 Palms</option>
     </select>
+    <label>Pressure:</label>
+    <select id="sel-press">
+      <option value="">-- pressure --</option>
+      <option value="double_a">Double A</option>
+      <option value="lb_fire">LB Fire</option>
+      <option value="nickel_fire">Nickel Fire</option>
+      <option value="fire_zone">Fire Zone (5)</option>
+      <option value="cover0">Cover 0 (All-Out)</option>
+    </select>
     <button id="btn-addzone">+ Zone</button>
     <div class="sep"></div>
     <button id="btn-undo">Undo</button>
@@ -174,7 +183,7 @@ canvas{display:block;width:100%;touch-action:none;cursor:crosshair}
 var C=document.getElementById('c'),ctx=C.getContext('2d');
 var W,H,YD,YD_V,LOS,LH_X,RH_X,hashPos,SL_WR,SLOT_IN,QB_Y,RB_Y;
 var OL_G=22,OL_T=22;
-var ballX=0,play='pass',defView=false,curCov='',curForm='',flip=false,curFront='';
+var ballX=0,play='pass',defView=false,curCov='',curForm='',flip=false,curFront='',curPress='';
 var players=[],routes=[],hist=[],assigns=[],zones=[];
 var uid=0;function nextId(){return ++uid;}
 var tool='assign',drawing=false,curPts=[],dragIdx=-1,dragOff={x:0,y:0},arcStart=null,dragAssign=-1,dragMode='move',zoneDrag=null,stemDrag=-1,lastClient={x:0,y:0},lastTap=0;
@@ -599,8 +608,7 @@ function loadForm(key){
   routes=[];
   ensureIds();remapManTargets();
   alignDBsToWRs();
-  if(curFront)applyFront(curFront,true);
-  if(curCov)applyCoverage(curCov,true);
+  refitDefense();
   render();
 }
 
@@ -616,7 +624,7 @@ document.getElementById('btn-flip').addEventListener('click',function(){
   if(flip)mirrorSkill();
   applyWRSplits();ensureIds();remapManTargets();
   alignDBsToWRs();
-  if(curCov)applyCoverage(curCov,true);
+  refitDefense();
   render();
 });
 
@@ -631,8 +639,7 @@ document.getElementById('sel-hash').addEventListener('change',function(){
   ballX=nx;
   if(curForm&&F[curForm]){players=F[curForm]().concat(def);if(flip)mirrorSkill();applyWRSplits();ensureIds();remapManTargets();}
   alignDBsToWRs();
-  if(curFront)applyFront(curFront,true);
-  if(curCov)applyCoverage(curCov,true);
+  refitDefense();
   render();
 });
 
@@ -644,7 +651,7 @@ document.getElementById('btn-defview').addEventListener('click',function(){defVi
 document.getElementById('btn-undo').addEventListener('click',function(){
   if(hist.length){var s=hist.pop();players=JSON.parse(s.p);routes=JSON.parse(s.r);assigns=s.a?JSON.parse(s.a):[];zones=s.z?JSON.parse(s.z):[];ensureIds();normalizeAssigns();render();}
 });
-document.getElementById('btn-clear').addEventListener('click',function(){saveH();routes=[];assigns=[];zones=[];curCov='';render();});
+document.getElementById('btn-clear').addEventListener('click',function(){saveH();routes=[];assigns=[];zones=[];curCov='';curPress='';render();});
 document.getElementById('btn-save').addEventListener('click',function(){exportPNG();});
 
 function gp(e){
@@ -783,7 +790,7 @@ function submitForm(mode,orig,name,pb,tagsStr){
   }
   if(idx<0&&plays.length>=MAXPLAYS){alert('Maximum of '+MAXPLAYS+' saved plays reached. Delete one first.');return;}
   if(idx>=0&&!confirm('A play named "'+name+'" already exists. Overwrite it?'))return;
-  var rec={name:name,ts:Date.now(),ballX:ballX,players:players,routes:routes,notes:notesEl.value,assigns:assigns,zones:zones,defView:defView,flip:flip,front:curFront,playbook:pb,tags:tags};
+  var rec={name:name,ts:Date.now(),ballX:ballX,players:players,routes:routes,notes:notesEl.value,assigns:assigns,zones:zones,defView:defView,flip:flip,front:curFront,press:curPress,playbook:pb,tags:tags};
   if(idx>=0)plays[idx]=rec;else plays.push(rec);
   setPlays(plays);openModal();
 }
@@ -798,7 +805,7 @@ function loadPlay(p){
   ensureIds();normalizeAssigns();
   defView=!!p.defView;document.getElementById('btn-defview').classList.toggle('act',defView);
   flip=!!p.flip;var fb=document.getElementById('btn-flip');if(fb)fb.classList.toggle('act',flip);
-  curFront=p.front||'';
+  curFront=p.front||'';curPress=p.press||'';
   notesEl.value=p.notes||'';
   try{localStorage.setItem(NKEY,notesEl.value);}catch(e){}
   render();
@@ -1159,7 +1166,7 @@ document.addEventListener('mousedown',maybeCloseMenu);
 document.addEventListener('touchstart',maybeCloseMenu,{passive:true});
 document.addEventListener('keydown',function(e){if(e.key==='Escape'){closeMenu();closeModal();}});
 
-document.getElementById('sel-cov').addEventListener('change',function(){applyCoverage(this.value);this.value='';});
+document.getElementById('sel-cov').addEventListener('change',function(){curPress='';applyCoverage(this.value);this.value='';});
 function getReceivers(){return players.filter(function(p){return p.color===O&&p.y<=LOS+R()*2.2;}).sort(function(a,b){return a.x-b.x;});}
 
 /* ---- Defensive Front calls (DL techniques + box) ---- */
@@ -1204,6 +1211,55 @@ function applyFront(front,internal){
   if(mike){mike.x=Math.round(ballX+s*OL_G);mike.y=lby;}
   if(will){will.x=Math.round(ballX-s*OL_G);will.y=lby;}
   if(!internal)render();
+}
+
+/* ---- Pressure packages (rushers + the coverage behind them) ---- */
+document.getElementById('sel-press').addEventListener('change',function(){applyPressure(this.value);this.value='';});
+function blitzGap(p,role){if(!p)return;clearForPhase(p.id,'both');var t=targetForRole(p,role);assigns.push({pid:p.id,phase:'both',kind:'run',role:role,tx:Math.round(t.x),ty:Math.round(t.y),curve:!!t.curve});}
+function dropToZone(p,role,rx,ry){if(!p)return;clearForPhase(p.id,'both');p.y=LOS-Math.round(4*YD_V);setCov(p,role,rx,ry);}
+var PRESS={
+  double_a:function(){
+    applyCoverage('1',true);
+    var mike=defByLabel('MIKE')[0],will=defByLabel('WILL')[0],cy=LOS-Math.round(1.5*YD_V),sh=Math.round(0.7*YD);
+    if(mike){mike.x=ballX+sh;mike.y=cy;}
+    if(will){will.x=ballX-sh;will.y=cy;}
+    blitzGap(mike,'A-gap blitz');blitzGap(will,'A-gap blitz');
+  },
+  lb_fire:function(){
+    applyCoverage('3',true);
+    var will=defByLabel('WILL')[0];if(will)will.y=LOS-Math.round(1.5*YD_V);
+    blitzGap(will,'Edge blitz');
+  },
+  nickel_fire:function(){
+    applyCoverage('3',true);
+    var nick=defByLabel('NICK')[0];if(nick)nick.y=LOS-Math.round(1.2*YD_V);
+    blitzGap(nick,'Edge blitz');
+  },
+  fire_zone:function(){
+    applyCoverage('3',true);
+    var s=frontDir(),cy=LOS-Math.round(1.5*YD_V);
+    var mike=defByLabel('MIKE')[0],will=defByLabel('WILL')[0];
+    if(mike)mike.y=cy;if(will)will.y=cy;
+    blitzGap(mike,'A-gap blitz');blitzGap(will,'B-gap blitz');
+    // backside end drops to the vacated hook — the zone-blitz exchange
+    var des=players.filter(function(p){return p.color===D&&p.label==='DE';}).sort(function(a,b){return a.x-b.x;});
+    var dropDE=s>0?des[0]:des[des.length-1];
+    if(dropDE)dropToZone(dropDE,'Hook/Curl',Math.round(W*0.07),Math.round(3.2*YD_V));
+  },
+  cover0:function(){applyCoverage('0',true);}
+};
+function applyPressure(pkg,internal){
+  if(!pkg||!PRESS[pkg])return;
+  curPress=pkg;
+  if(!internal)saveH();
+  PRESS[pkg]();
+  if(!internal)render();
+}
+// re-fit the whole defensive call (front, then pressure or its standalone coverage)
+function refitDefense(){
+  if(curFront)applyFront(curFront,true);
+  if(curPress)applyPressure(curPress,true);
+  else if(curCov)applyCoverage(curCov,true);
 }
 var manScheme='';
 function alignOver(d,r){if(!d||!r)return;var lev=Math.round(0.6*YD)*(r.x<ballX?1:-1);var dep;if(d.label==='CB')dep=manScheme==='0'?1.2:4;else if(d.label==='NICK'||d.label==='SS')dep=4;else dep=3;d.x=Math.round(r.x+lev);d.y=Math.round(LOS-dep*YD_V);}
