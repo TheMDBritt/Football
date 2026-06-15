@@ -981,9 +981,9 @@ function kindCol(k){return (k==='run'||k==='runfit')?RFCOL:(k==='rush'||k==='pas
 function clearForPhase(pid,phase){assigns=assigns.filter(function(a){if(a.pid!==pid)return true;if(phase==='both')return false;if(phase==='run')return !(a.phase==='run'||a.phase==='both');return !(a.phase==='pass'||a.phase==='both');});}
 function isDL(p){return p.dt||p.label==='DE'||p.label==='NT';}
 function interiorDTs(){return players.filter(function(p){return p.color===D&&p.dt;}).sort(function(a,b){return a.x-b.x;});}
-// box view: DL + box LBs only — everything else (offense, secondary) hidden
-var HIDE_BOX={'CB':1,'FS':1,'SS':1,'NICK':1,'QB':1,'RB':1,'FB':1,'X':1,'Z':1,'H':1,'Y':1,'TE':1,'WR':1,'C':1,'LG':1,'RG':1,'LT':1,'RT':1};
-function isBoxPlayer(p){if(HIDE_BOX[p.label])return false;return p.color===D;}
+// box view: hide perimeter only (WRs and secondary) — keep OL, backfield, DL, LBs
+var HIDE_BOX={'CB':1,'FS':1,'SS':1,'NICK':1,'X':1,'Z':1,'H':1,'Y':1,'WR':1};
+function isBoxPlayer(p){return !HIDE_BOX[p.label];}
 function isDeepRole(r){return /^Deep/.test(r||'');}
 function isDeepDefender(p){return !!p&&(p.label==='CB'||p.label==='FS'||p.label==='SS');}
 function normalizeAssigns(){assigns.forEach(function(a){if(a.kind==='runfit')a.kind='run';else if(a.kind==='passrush')a.kind='rush';else if(a.kind==='coverage')a.kind='cover';if(!a.phase)a.phase=(a.kind==='run')?'run':'pass';});}
