@@ -112,6 +112,7 @@ canvas{display:block;width:100%;touch-action:none;cursor:crosshair}
       <option value="run">Run</option>
     </select>
     <button id="btn-defview">Def View</button>
+    <button id="btn-boxview" title="Show only DL + LB for a front diagram">Box View</button>
     <div class="sep"></div>
     <button id="t-assign" class="act">Assign</button>
     <button id="t-route">Draw</button>
@@ -195,7 +196,7 @@ canvas{display:block;width:100%;touch-action:none;cursor:crosshair}
 var C=document.getElementById('c'),ctx=C.getContext('2d');
 var W,H,YD,YD_V,LOS,LH_X,RH_X,hashPos,SL_WR,SLOT_IN,QB_Y,RB_Y;
 var OL_G=22,OL_T=22;
-var ballX=0,play='pass',defView=false,curCov='',curForm='',flip=false,curFront='',curPress='';
+var ballX=0,play='pass',defView=false,boxView=false,curCov='',curForm='',flip=false,curFront='',curPress='';
 var players=[],routes=[],hist=[],assigns=[],zones=[];
 var uid=0;function nextId(){return ++uid;}
 var tool='assign',drawing=false,curPts=[],dragIdx=-1,dragOff={x:0,y:0},arcStart=null,dragAssign=-1,dragMode='move',zoneDrag=null,stemDrag=-1,lastClient={x:0,y:0},lastTap=0,routeAnchorId=null;
@@ -355,9 +356,16 @@ function render(){
     ctx.beginPath();curPts.forEach(function(p,i){i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y);});
     ctx.stroke();ctx.setLineDash([]);ctx.restore();
   }
-  players.forEach(drawPlayer);
-  assigns.forEach(function(a){if(play==='run'&&a.phase==='pass')return;if(play==='pass'&&a.phase==='run')return;drawAssign(a);});
-  drawBall();
+  var visPlayers=boxView?players.filter(isBoxPlayer):players;
+  var visIds=boxView?visPlayers.reduce(function(m,p){m[p.id]=1;return m;},{}):null;
+  visPlayers.forEach(drawPlayer);
+  assigns.forEach(function(a){
+    if(play==='run'&&a.phase==='pass')return;
+    if(play==='pass'&&a.phase==='run')return;
+    if(visIds&&!visIds[a.pid])return;
+    drawAssign(a);
+  });
+  if(!boxView)drawBall();
   ctx.restore();
 }
 
@@ -684,6 +692,7 @@ document.getElementById('sel-hash').addEventListener('change',function(){
   document.getElementById('t-'+t).addEventListener('click',function(){setTool(t);});
 });
 document.getElementById('btn-defview').addEventListener('click',function(){defView=!defView;this.classList.toggle('act',defView);render();});
+document.getElementById('btn-boxview').addEventListener('click',function(){boxView=!boxView;this.classList.toggle('act',boxView);render();});
 
 document.getElementById('btn-undo').addEventListener('click',function(){
   if(hist.length){var s=hist.pop();players=JSON.parse(s.p);routes=JSON.parse(s.r);assigns=s.a?JSON.parse(s.a):[];zones=s.z?JSON.parse(s.z):[];ensureIds();normalizeAssigns();render();}
@@ -972,6 +981,9 @@ function kindCol(k){return (k==='run'||k==='runfit')?RFCOL:(k==='rush'||k==='pas
 function clearForPhase(pid,phase){assigns=assigns.filter(function(a){if(a.pid!==pid)return true;if(phase==='both')return false;if(phase==='run')return !(a.phase==='run'||a.phase==='both');return !(a.phase==='pass'||a.phase==='both');});}
 function isDL(p){return p.dt||p.label==='DE'||p.label==='NT';}
 function interiorDTs(){return players.filter(function(p){return p.color===D&&p.dt;}).sort(function(a,b){return a.x-b.x;});}
+// box view: only defensive players that are DL or box LBs (not CB/FS/SS/NICK)
+var BOX_SKIP={'CB':1,'FS':1,'SS':1,'NICK':1};
+function isBoxPlayer(p){if(p.color!==D)return false;if(isDL(p))return true;return !BOX_SKIP[p.label];}
 function isDeepRole(r){return /^Deep/.test(r||'');}
 function isDeepDefender(p){return !!p&&(p.label==='CB'||p.label==='FS'||p.label==='SS');}
 function normalizeAssigns(){assigns.forEach(function(a){if(a.kind==='runfit')a.kind='run';else if(a.kind==='passrush')a.kind='rush';else if(a.kind==='coverage')a.kind='cover';if(!a.phase)a.phase=(a.kind==='run')?'run':'pass';});}
