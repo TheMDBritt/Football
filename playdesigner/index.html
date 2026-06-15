@@ -158,8 +158,7 @@ canvas{display:block;width:100%;touch-action:none;cursor:crosshair}
       <option value="et_strong">ET (strong)</option>
       <option value="et_weak">ET (weak)</option>
       <option value="twist">Twist (DTs cross)</option>
-      <option value="pirate">Pirate (double TEX)</option>
-      <option value="lightning">Lightning (double ET)</option>
+      <option value="pirate">Pirate (both DEs crash inside)</option>
     </select>
     <button id="btn-addzone">+ Zone</button>
     <div class="sep"></div>
@@ -200,7 +199,7 @@ var OL_G=22,OL_T=22;
 var ballX=0,play='pass',defView=false,curCov='',curForm='',flip=false,curFront='',curPress='';
 var players=[],routes=[],hist=[],assigns=[],zones=[];
 var uid=0;function nextId(){return ++uid;}
-var tool='assign',drawing=false,curPts=[],dragIdx=-1,dragOff={x:0,y:0},arcStart=null,dragAssign=-1,dragMode='move',zoneDrag=null,stemDrag=-1,lastClient={x:0,y:0},lastTap=0;
+var tool='assign',drawing=false,curPts=[],dragIdx=-1,dragOff={x:0,y:0},arcStart=null,dragAssign=-1,dragMode='move',zoneDrag=null,stemDrag=-1,lastClient={x:0,y:0},lastTap=0,routeAnchorId=null;
 
 function saveH(){hist.push({p:JSON.stringify(players),r:JSON.stringify(routes),a:JSON.stringify(assigns),z:JSON.stringify(zones)});if(hist.length>50)hist.shift();}
 
@@ -308,6 +307,13 @@ function drawPlayer(pl){
   ctx.restore();
 }
 
+// resolve absolute pts for a route — handles player-tied freehand routes ({dx,dy} offsets) vs normal ({x,y})
+function routePts(r){
+  if(!r.tied||!r.pid){return r.pts;}
+  var ap=playerById(r.pid);if(!ap)return null;
+  return r.pts.map(function(p){return{x:p.dx+ap.x,y:p.dy+ap.y};});
+}
+
 // contrast halo so play art reads on the turf: dark casing under light lines, light under dark
 function caseColor(col){return tagLum(col)>0.55?'rgba(0,0,0,0.55)':'rgba(255,255,255,0.9)';}
 function arrowHead(x2,y2,ang,hl){ctx.beginPath();ctx.moveTo(x2,y2);ctx.lineTo(x2-hl*Math.cos(ang-0.42),y2-hl*Math.sin(ang-0.42));ctx.lineTo(x2-hl*Math.cos(ang+0.42),y2-hl*Math.sin(ang+0.42));ctx.closePath();ctx.fill();}
@@ -335,9 +341,10 @@ function render(){
   routes.forEach(function(r){
     ctx.save();ctx.lineCap='round';ctx.lineJoin='round';
     if(r.type==='route'){
-      ctx.strokeStyle=caseColor(r.col);ctx.lineWidth=6;ctx.beginPath();r.pts.forEach(function(p,i){i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y);});ctx.stroke();
-      ctx.strokeStyle=r.col;ctx.lineWidth=3.3;ctx.setLineDash([7,4]);ctx.beginPath();r.pts.forEach(function(p,i){i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y);});ctx.stroke();ctx.setLineDash([]);
-      var lp=r.pts,n=lp.length;if(n>1){var aa=Math.atan2(lp[n-1].y-lp[n-2].y,lp[n-1].x-lp[n-2].x);ctx.fillStyle=caseColor(r.col);arrowHead(lp[n-1].x,lp[n-1].y,aa,15);ctx.fillStyle=r.col;arrowHead(lp[n-1].x,lp[n-1].y,aa,12);}
+      var lp=routePts(r);if(!lp||lp.length<2){ctx.restore();return;}
+      ctx.strokeStyle=caseColor(r.col);ctx.lineWidth=6;ctx.beginPath();lp.forEach(function(p,i){i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y);});ctx.stroke();
+      ctx.strokeStyle=r.col;ctx.lineWidth=3.3;ctx.setLineDash([7,4]);ctx.beginPath();lp.forEach(function(p,i){i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y);});ctx.stroke();ctx.setLineDash([]);
+      var n=lp.length;var aa=Math.atan2(lp[n-1].y-lp[n-2].y,lp[n-1].x-lp[n-2].x);ctx.fillStyle=caseColor(r.col);arrowHead(lp[n-1].x,lp[n-1].y,aa,15);ctx.fillStyle=r.col;arrowHead(lp[n-1].x,lp[n-1].y,aa,12);
     }
     else if(r.type==='tree'){if(play!=='run')drawTree(r);}
     else if(r.type==='arrow'){drawArrow(r.x1,r.y1,r.x2,r.y2,r.col);}
@@ -693,8 +700,9 @@ function hitR(x,y){
   for(var i=routes.length-1;i>=0;i--){
     var r=routes[i];
     if(r.type==='route'||r.type==='tree'){
-      var pts=r.pts;
+      var pts;
       if(r.type==='tree'){var pl=playerById(r.pid);if(!pl)continue;pts=routePoints(pl,r.concept,r.stem);}
+      else{pts=routePts(r);if(!pts)continue;}
       for(var j=0;j<pts.length-1;j++){
         var dx=pts[j+1].x-pts[j].x,dy=pts[j+1].y-pts[j].y,len=Math.sqrt(dx*dx+dy*dy);
         if(len<1)continue;
@@ -714,7 +722,13 @@ function onDown(pos){
     return;
   }
   var pi=hitP(pos.x,pos.y);
-  if(pi>=0){dragIdx=pi;dragOff={x:pos.x-players[pi].x,y:pos.y-players[pi].y};return;}
+  if(pi>=0){
+    // route tool on a def player: start a player-tied freehand route instead of dragging
+    if(tool==='route'&&players[pi].color===D){
+      routeAnchorId=players[pi].id;drawing=true;curPts=[pos];return;
+    }
+    dragIdx=pi;dragOff={x:pos.x-players[pi].x,y:pos.y-players[pi].y};return;
+  }
   if(tool==='assign'){
     var hs=hitStem(pos.x,pos.y);if(hs>=0){stemDrag=hs;return;}
     var g=hitAssignGrab(pos.x,pos.y);if(g){dragAssign=g.i;dragMode=g.mode;return;}
@@ -745,7 +759,19 @@ function onUp(pos){
   if(stemDrag>=0){saveH();stemDrag=-1;render();return;}
   if(zoneDrag){saveH();zoneDrag=null;render();return;}
   if(!drawing)return;drawing=false;
-  if(tool==='route'&&curPts.length>1){saveH();routes.push({type:'route',pts:curPts.slice(),col:'#5af'});curPts=[];}
+  if(tool==='route'&&curPts.length>1){
+    saveH();
+    if(routeAnchorId!=null){
+      var rap=playerById(routeAnchorId);
+      if(rap){
+        var rx0=rap.x,ry0=rap.y;
+        routes.push({type:'route',tied:true,pid:routeAnchorId,pts:curPts.map(function(p){return{dx:p.x-rx0,dy:p.y-ry0};}),col:PRCOL});
+      }
+    } else {
+      routes.push({type:'route',pts:curPts.slice(),col:'#5af'});
+    }
+    curPts=[];routeAnchorId=null;
+  }
   else if(arcStart){saveH();routes.push({type:tool,x1:arcStart.x,y1:arcStart.y,x2:pos.x,y2:pos.y,col:'#5af'});arcStart=null;}
   render();
 }
@@ -987,10 +1013,11 @@ function targetForRole(p,role){
   return m[role]||{x:p.x,y:L-Math.round(5*YD_V)};
 }
 
-function drawCurvedArrow(x1,y1,x2,y2,col){
+function drawCurvedArrow(x1,y1,x2,y2,col,bow){
+  bow=bow||1;
   var dx=x2-x1,dy=y2-y1,len=Math.hypot(dx,dy)||1;
   var nx=-dy/len,ny=dx/len,off=Math.min(60,len*0.55);
-  var cx=(x1+x2)/2+nx*off,cy=(y1+y2)/2+ny*off;
+  var cx=(x1+x2)/2+bow*nx*off,cy=(y1+y2)/2+bow*ny*off;
   var ang=Math.atan2(y2-cy,x2-cx),cc=caseColor(col);
   ctx.save();ctx.lineCap='round';ctx.lineJoin='round';
   ctx.strokeStyle=cc;ctx.fillStyle=cc;ctx.lineWidth=6.4;
@@ -1030,10 +1057,13 @@ function drawAssign(a){
     ctx.restore();
     return;
   }
-  if(a.curve)drawCurvedArrow(p.x,p.y,a.tx,a.ty,col);
-  else drawArrow(p.x,p.y,a.tx,a.ty,col);
+  // start arrow from edge of player circle, not center, so it doesn't cover the token
+  var r0=R(),ddx=a.tx-p.x,ddy=a.ty-p.y,dlen=Math.hypot(ddx,ddy)||1;
+  var sx=p.x+r0*ddx/dlen,sy=p.y+r0*ddy/dlen;
+  if(a.curve)drawCurvedArrow(sx,sy,a.tx,a.ty,col,a.bow||1);
+  else drawArrow(sx,sy,a.tx,a.ty,col);
   // line-game actions (crash/contain/cross) read from the arrows themselves — no text tag to pile up
-  if(!/^(crash|contain|cross)$/.test(a.role))drawTag(a.tx,a.ty,a.role,col);
+  if(!/^(crash|contain|cross)$/i.test(a.role))drawTag(a.tx,a.ty,a.role,col);
 }
 function drawZone(z){
   ctx.save();
@@ -1077,14 +1107,14 @@ function addStunt(pi,stunt){
   function pickDE(){var c=null,cd=-1;players.forEach(function(p){if(p.color===D&&p.label==='DE'&&(p.x-ballX)*s>0){var d=Math.abs(p.x-ballX);if(d>cd){cd=d;c=p;}}});return c;}
   var Dg=OL_G+OL_T+r*3.2;
   var inside={x:Math.round(ballX+s*OL_G*0.5),y:LOS};
-  var contain={x:Math.round(ballX+s*(Dg+r*2)),y:Math.round(LOS-1.5*YD_V)};
-  function push(p,role,t,curve){if(p){clearForPhase(p.id,'pass');assigns.push({pid:p.id,phase:'pass',kind:'rush',role:role,tx:t.x,ty:t.y,curve:curve});}}
+  var contain={x:Math.round(ballX+s*(Dg+r*2.5)),y:Math.round(LOS+0.8*YD_V)};
+  function push(p,role,t,curve,bow){if(p){clearForPhase(p.id,'pass');var a={pid:p.id,phase:'pass',kind:'rush',role:role,tx:t.x,ty:t.y,curve:curve};if(bow!=null)a.bow=bow;assigns.push(a);}}
   if(stunt.indexOf('TEX')===0){
     var dt=pickDT(),de=pickDE();if(!dt||!de)return;saveH();
-    push(de,'crash',inside,false);push(dt,'contain',contain,true);
+    push(de,'crash',inside,false,1);push(dt,'contain',contain,true,-1);
   }else if(stunt.indexOf('ET')===0){
     var dt2=pickDT(),de2=pickDE();if(!dt2||!de2)return;saveH();
-    push(dt2,'crash',inside,false);push(de2,'contain',contain,true);
+    push(dt2,'crash',inside,false,1);push(de2,'contain',contain,true,-1);
   }else{
     var t3=defByLabel('3T')[0],t1=defByLabel('1T')[0];if(!t3||!t1)return;saveH();
     push(t3,'cross',{x:Math.round(ballX+OL_G*0.5),y:LOS},true);
@@ -1288,7 +1318,7 @@ function refitDefense(){
 
 /* ---- Team stunts / line games (one-click DL games) ---- */
 document.getElementById('sel-stunt').addEventListener('change',function(){applyTeamStunt(this.value);this.value='';});
-function gamePush(p,role,t,curve){if(p){clearForPhase(p.id,'pass');assigns.push({pid:p.id,phase:'pass',kind:'rush',role:role,tx:Math.round(t.x),ty:Math.round(t.y),curve:!!curve});}}
+function gamePush(p,role,t,curve,bow){if(p){clearForPhase(p.id,'pass');var a={pid:p.id,phase:'pass',kind:'rush',role:role,tx:Math.round(t.x),ty:Math.round(t.y),curve:!!curve};if(bow!=null)a.bow=bow;assigns.push(a);}}
 // deFirst=true -> TEX (end crashes inside, tackle loops to contain); false -> ET (tackle in, end contains)
 function teGame(side,deFirst){
   var r=R(),Dg=OL_G+OL_T+r*3.2,dt=null,dtd=1e9,de=null,ded=-1;
@@ -1300,9 +1330,9 @@ function teGame(side,deFirst){
   if(!dt||!de)return false;
   var crasher=deFirst?de:dt,looper=deFirst?dt:de;
   // crasher knifes a couple yards into the gap just inside his own alignment, barely past the LOS
-  gamePush(crasher,'crash',{x:crasher.x-side*Math.round(2*YD),y:LOS+Math.round(0.6*YD_V)},true);
-  // looper loops over the top to contain off the edge
-  gamePush(looper,'contain',{x:ballX+side*(Dg+r*2),y:LOS-Math.round(0.3*YD_V)},true);
+  gamePush(crasher,'crash',{x:crasher.x-side*Math.round(2*YD),y:LOS+Math.round(0.6*YD_V)},true,1);
+  // looper arcs over the crash path and contains off the edge past the LOS; bow=-1 curves it outward
+  gamePush(looper,'contain',{x:ballX+side*(Dg+r*2.5),y:LOS+Math.round(0.8*YD_V)},true,-1);
   return true;
 }
 function twistDTs(){
@@ -1311,14 +1341,24 @@ function twistDTs(){
   gamePush(t1,'cross',{x:ballX-OL_G*0.7,y:LOS+Math.round(0.9*YD_V)},false);
   return true;
 }
+// Pirate: both DEs crash inside B-gap simultaneously — pure inside DE slant, no looper
+function pirateStunt(){
+  var r=R();
+  var des=players.filter(function(p){return p.color===D&&p.label==='DE';});
+  if(!des.length)return false;
+  des.forEach(function(de){
+    var side=(de.x>ballX)?1:-1;
+    gamePush(de,'crash',{x:de.x-side*Math.round(2*YD),y:LOS+Math.round(0.7*YD_V)},true,1);
+  });
+  return true;
+}
 var TEAMSTUNT={
   tex_strong:function(s){return teGame(s,true);},
   tex_weak:function(s){return teGame(-s,true);},
   et_strong:function(s){return teGame(s,false);},
   et_weak:function(s){return teGame(-s,false);},
   twist:function(){return twistDTs();},
-  pirate:function(s){var a=teGame(s,true),b=teGame(-s,true);return a||b;},
-  lightning:function(s){var a=teGame(s,false),b=teGame(-s,false);return a||b;}
+  pirate:function(){return pirateStunt();}
 };
 function applyTeamStunt(name){
   if(!name||!TEAMSTUNT[name])return;
