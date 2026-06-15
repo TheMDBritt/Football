@@ -117,6 +117,17 @@ canvas{display:block;width:100%;touch-action:none;cursor:crosshair}
     <button id="t-route">Draw</button>
     <button id="t-erase">Erase</button>
     <div class="sep"></div>
+    <label>Front:</label>
+    <select id="sel-front">
+      <option value="">-- front --</option>
+      <option value="over">Over</option>
+      <option value="under">Under</option>
+      <option value="tite">Tite</option>
+      <option value="mint">Mint</option>
+      <option value="bear">Bear (46)</option>
+      <option value="g">G</option>
+      <option value="okie">3-4 Okie</option>
+    </select>
     <label>Cov:</label>
     <select id="sel-cov">
       <option value="">-- preset --</option>
@@ -163,7 +174,7 @@ canvas{display:block;width:100%;touch-action:none;cursor:crosshair}
 var C=document.getElementById('c'),ctx=C.getContext('2d');
 var W,H,YD,YD_V,LOS,LH_X,RH_X,hashPos,SL_WR,SLOT_IN,QB_Y,RB_Y;
 var OL_G=22,OL_T=22;
-var ballX=0,play='pass',defView=false,curCov='',curForm='',flip=false;
+var ballX=0,play='pass',defView=false,curCov='',curForm='',flip=false,curFront='';
 var players=[],routes=[],hist=[],assigns=[],zones=[];
 var uid=0;function nextId(){return ++uid;}
 var tool='assign',drawing=false,curPts=[],dragIdx=-1,dragOff={x:0,y:0},arcStart=null,dragAssign=-1,dragMode='move',zoneDrag=null,stemDrag=-1,lastClient={x:0,y:0},lastTap=0;
@@ -588,6 +599,7 @@ function loadForm(key){
   routes=[];
   ensureIds();remapManTargets();
   alignDBsToWRs();
+  if(curFront)applyFront(curFront,true);
   if(curCov)applyCoverage(curCov,true);
   render();
 }
@@ -619,6 +631,7 @@ document.getElementById('sel-hash').addEventListener('change',function(){
   ballX=nx;
   if(curForm&&F[curForm]){players=F[curForm]().concat(def);if(flip)mirrorSkill();applyWRSplits();ensureIds();remapManTargets();}
   alignDBsToWRs();
+  if(curFront)applyFront(curFront,true);
   if(curCov)applyCoverage(curCov,true);
   render();
 });
@@ -770,7 +783,7 @@ function submitForm(mode,orig,name,pb,tagsStr){
   }
   if(idx<0&&plays.length>=MAXPLAYS){alert('Maximum of '+MAXPLAYS+' saved plays reached. Delete one first.');return;}
   if(idx>=0&&!confirm('A play named "'+name+'" already exists. Overwrite it?'))return;
-  var rec={name:name,ts:Date.now(),ballX:ballX,players:players,routes:routes,notes:notesEl.value,assigns:assigns,zones:zones,defView:defView,flip:flip,playbook:pb,tags:tags};
+  var rec={name:name,ts:Date.now(),ballX:ballX,players:players,routes:routes,notes:notesEl.value,assigns:assigns,zones:zones,defView:defView,flip:flip,front:curFront,playbook:pb,tags:tags};
   if(idx>=0)plays[idx]=rec;else plays.push(rec);
   setPlays(plays);openModal();
 }
@@ -785,6 +798,7 @@ function loadPlay(p){
   ensureIds();normalizeAssigns();
   defView=!!p.defView;document.getElementById('btn-defview').classList.toggle('act',defView);
   flip=!!p.flip;var fb=document.getElementById('btn-flip');if(fb)fb.classList.toggle('act',flip);
+  curFront=p.front||'';
   notesEl.value=p.notes||'';
   try{localStorage.setItem(NKEY,notesEl.value);}catch(e){}
   render();
@@ -1147,6 +1161,50 @@ document.addEventListener('keydown',function(e){if(e.key==='Escape'){closeMenu()
 
 document.getElementById('sel-cov').addEventListener('change',function(){applyCoverage(this.value);this.value='';});
 function getReceivers(){return players.filter(function(p){return p.color===O&&p.y<=LOS+R()*2.2;}).sort(function(a,b){return a.x-b.x;});}
+
+/* ---- Defensive Front calls (DL techniques + box) ---- */
+document.getElementById('sel-front').addEventListener('change',function(){applyFront(this.value);this.value='';});
+function frontDir(){
+  var hash=ballX<W*0.46?-1:(ballX>W*0.54?1:0);
+  if(hash!==0)return -hash; // strength to the field on a hash
+  var recs=getReceivers();
+  var r=recs.filter(function(p){return p.x>ballX;}).length,l=recs.filter(function(p){return p.x<ballX;}).length;
+  return r>=l?1:-1;
+}
+// off: -1 inside shade, 0 head-up, +1 outside shade; ref C/G/T/E; side strong(+1)/weak(-1)
+function techX(ref,off,s){
+  var sh=Math.round(0.85*YD);
+  var base=ref==='C'?ballX:ref==='G'?ballX+s*OL_G:ref==='T'?ballX+s*(OL_G+OL_T):ballX+s*(OL_G+OL_T+Math.round(1.7*YD));
+  return Math.round(base+s*off*sh);
+}
+var FRONTS={
+  over:[{ref:'C',off:-1,w:1,tag:'1'},{ref:'G',off:1,w:0,tag:'3'},{ref:'T',off:1,w:0,tag:'5'},{ref:'T',off:1,w:1,tag:'5'}],
+  under:[{ref:'C',off:1,w:0,tag:'1'},{ref:'G',off:1,w:1,tag:'3'},{ref:'E',off:1,w:0,tag:'9'},{ref:'T',off:1,w:1,tag:'5'}],
+  tite:[{ref:'C',off:0,w:0,tag:'0'},{ref:'T',off:-1,w:0,tag:'4i'},{ref:'T',off:-1,w:1,tag:'4i'},{ref:'E',off:1,w:0,tag:'9'}],
+  mint:[{ref:'C',off:0,w:0,tag:'0'},{ref:'T',off:-1,w:0,tag:'4i'},{ref:'T',off:-1,w:1,tag:'4i'},{ref:'E',off:1,w:1,tag:'5'}],
+  bear:[{ref:'C',off:0,w:0,tag:'0'},{ref:'G',off:1,w:0,tag:'3'},{ref:'G',off:1,w:1,tag:'3'},{ref:'T',off:1,w:0,tag:'5'}],
+  g:[{ref:'G',off:-1,w:0,tag:'2i'},{ref:'G',off:1,w:1,tag:'3'},{ref:'T',off:1,w:0,tag:'5'},{ref:'T',off:1,w:1,tag:'5'}],
+  okie:[{ref:'C',off:0,w:0,tag:'0'},{ref:'T',off:1,w:0,tag:'5'},{ref:'T',off:1,w:1,tag:'5'},{ref:'E',off:1,w:0,tag:'9'}]
+};
+function applyFront(front,internal){
+  if(!front||!FRONTS[front])return;
+  curFront=front;
+  if(!internal)saveH();
+  var s=frontDir();
+  var DLY=LOS-Math.round(1.2*YD_V),EDY=LOS-Math.round(1*YD_V);
+  var dl=players.filter(function(p){return p.color===D&&isDL(p);});
+  if(dl.length>=4){
+    var targets=FRONTS[front].map(function(t){return {x:techX(t.ref,t.off,t.w?-s:s),tag:t.tag,edge:t.ref==='E'};});
+    targets.sort(function(a,b){return a.x-b.x;});
+    dl.sort(function(a,b){return a.x-b.x;});
+    dl.forEach(function(p,i){var t=targets[i];p.x=t.x;p.y=t.edge?EDY:DLY;p.dl=t.tag;});
+  }
+  // box backers stack the guards unless a coverage later pulls them to a drop
+  var mike=defByLabel('MIKE')[0],will=defByLabel('WILL')[0],lby=LOS-Math.round(4.5*YD_V);
+  if(mike){mike.x=Math.round(ballX+s*OL_G);mike.y=lby;}
+  if(will){will.x=Math.round(ballX-s*OL_G);will.y=lby;}
+  if(!internal)render();
+}
 var manScheme='';
 function alignOver(d,r){if(!d||!r)return;var lev=Math.round(0.6*YD)*(r.x<ballX?1:-1);var dep;if(d.label==='CB')dep=manScheme==='0'?1.2:4;else if(d.label==='NICK'||d.label==='SS')dep=4;else dep=3;d.x=Math.round(r.x+lev);d.y=Math.round(LOS-dep*YD_V);}
 function manAlign(extra){
