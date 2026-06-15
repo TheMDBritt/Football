@@ -38,6 +38,26 @@ canvas{display:block;width:100%;touch-action:none;cursor:crosshair}
 #modal .pl button{font-size:11px;padding:3px 8px;border-radius:4px;border:1px solid #633;background:#222;color:#c66;cursor:pointer;flex-shrink:0}
 #modal .pl button:hover{background:#2a2a2a}
 #modal .empty{padding:18px 12px;font-size:12px;color:#555;text-align:center}
+#modal .tools{position:sticky;top:0;z-index:2;padding:8px 10px;background:#181818;border-bottom:1px solid #1e1e1e}
+#modal .tools input{width:100%;background:#141414;color:#ccc;border:1px solid #2a2a2a;border-radius:4px;padding:6px 9px;font-size:12px;font-family:inherit}
+#modal .tools input:focus{outline:none;border-color:#185FA5}
+#modal .grp{font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#6a6a6a;padding:9px 12px 4px}
+#modal .pl .meta{flex:1;min-width:0;cursor:pointer;overflow:hidden}
+#modal .pl .meta .nm2{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+#modal .pl .meta:hover .nm2{color:#fff}
+#modal .pl .meta .dt2{font-size:10px;color:#555;margin-left:6px}
+#modal .pl .chips{margin-top:3px;display:flex;flex-wrap:wrap;gap:3px}
+#modal .chip{font-size:9px;background:#1f2c1f;color:#9bba8a;border:1px solid #2c3c2c;border-radius:3px;padding:1px 5px}
+#modal .pl .edit{border-color:#3a3a3a;color:#bbb}
+#modal .form{padding:12px;display:flex;flex-direction:column;gap:11px}
+#modal .form label{font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#777;display:flex;flex-direction:column;gap:5px}
+#modal .form .hint{font-size:10px;color:#555;text-transform:none;letter-spacing:0;font-weight:400}
+#modal .form input{background:#141414;color:#ddd;border:1px solid #2a2a2a;border-radius:4px;padding:8px 9px;font-size:13px;font-family:inherit}
+#modal .form input:focus{outline:none;border-color:#185FA5}
+#modal .form .actions{display:flex;gap:8px;justify-content:flex-end;margin-top:2px}
+#modal .form .actions button{font-size:12px;padding:7px 14px;border-radius:4px;border:1px solid #333;background:#222;color:#ccc;cursor:pointer}
+#modal .form .actions button.primary{background:#185FA5;border-color:#185FA5;color:#fff}
+#modal .form .actions button:hover{filter:brightness(1.2)}
 #ctxmenu{display:none;position:fixed;z-index:200;background:#181818;border:1px solid #333;border-radius:6px;padding:4px;min-width:148px;max-height:260px;overflow:auto;box-shadow:0 6px 22px rgba(0,0,0,0.55)}
 #ctxmenu.open{display:block}
 #ctxmenu .ttl{font-size:10px;font-weight:600;letter-spacing:1px;text-transform:uppercase;color:#777;padding:5px 8px 6px;border-bottom:1px solid #2a2a2a;margin-bottom:3px}
@@ -114,7 +134,7 @@ canvas{display:block;width:100%;touch-action:none;cursor:crosshair}
     <button id="btn-save">Save PNG</button>
     <div class="sep"></div>
     <button id="btn-saveplay">Save Play</button>
-    <button id="btn-loadplay">Load Play</button>
+    <button id="btn-loadplay">Playbook</button>
   </div>
   <canvas id="c"></canvas>
   <div id="leg">
@@ -133,7 +153,7 @@ canvas{display:block;width:100%;touch-action:none;cursor:crosshair}
 </div>
 
 <div id="modal"><div class="box">
-  <div class="hd"><span>Saved Plays</span><button id="modal-close">Close</button></div>
+  <div class="hd"><span id="modal-title">Playbook</span><button id="modal-close">Close</button></div>
   <div id="modal-list"></div>
 </div></div>
 
@@ -703,22 +723,56 @@ loadForm('gun_2x2');
 document.getElementById('sel-form').value='gun_2x2';
 
 /* ---- Save / Load plays (localStorage) ---- */
-var PKEY='cpd_plays',MAXPLAYS=50;
-function getPlays(){try{var v=JSON.parse(localStorage.getItem(PKEY));return Array.isArray(v)?v:[];}catch(e){return [];}}
+var PKEY='cpd_plays',MAXPLAYS=50,playFilter='';
+function normPlay(p){if(!p.playbook||typeof p.playbook!=='string')p.playbook='Unfiled';if(!Array.isArray(p.tags))p.tags=[];return p;}
+function getPlays(){try{var v=JSON.parse(localStorage.getItem(PKEY));return Array.isArray(v)?v.map(normPlay):[];}catch(e){return [];}}
 function setPlays(a){try{localStorage.setItem(PKEY,JSON.stringify(a));return true;}catch(e){alert('Could not save — browser storage is full or unavailable.');return false;}}
+function getPlaybooks(){var s={'Unfiled':1};getPlays().forEach(function(p){s[p.playbook]=1;});return Object.keys(s).sort();}
+function parseTags(str){var seen={},out=[];(str||'').split(',').forEach(function(t){t=t.trim();var k=t.toLowerCase();if(t&&!seen[k]){seen[k]=1;out.push(t);}});return out;}
 
-function savePlay(){
-  var name=prompt('Play name:');
-  if(name===null)return;
-  name=name.trim();
+function openSave(){document.getElementById('modal').classList.add('open');showForm('new',null);}
+function showForm(mode,play){
+  document.getElementById('modal-title').textContent=mode==='edit'?'Edit Play':'Save Play';
+  var box=document.getElementById('modal-list');box.innerHTML='';
+  var form=document.createElement('div');form.className='form';
+  var dl=document.createElement('datalist');dl.id='pb-list';
+  getPlaybooks().forEach(function(b){var o=document.createElement('option');o.value=b;dl.appendChild(o);});
+  function field(labelText,hint){
+    var l=document.createElement('label');l.appendChild(document.createTextNode(labelText));
+    if(hint){var h=document.createElement('span');h.className='hint';h.textContent=hint;l.appendChild(h);}
+    var inp=document.createElement('input');l.appendChild(inp);form.appendChild(l);return inp;
+  }
+  var nameI=field('Play name','');nameI.value=play?play.name:'';
+  var pbI=field('Playbook','folder to group under');pbI.setAttribute('list','pb-list');pbI.value=play?play.playbook:'Unfiled';
+  var tagI=field('Tags','comma-separated — e.g. red zone, vs cover 3');tagI.value=play?play.tags.join(', '):'';
+  form.appendChild(dl);
+  if(mode==='edit'){var note=document.createElement('div');note.className='hint';note.textContent='Editing labels only — the saved diagram is unchanged.';form.appendChild(note);}
+  var act=document.createElement('div');act.className='actions';
+  var cancel=document.createElement('button');cancel.textContent='Cancel';cancel.addEventListener('click',openModal);
+  var ok=document.createElement('button');ok.className='primary';ok.textContent=mode==='edit'?'Update':'Save';
+  ok.addEventListener('click',function(){submitForm(mode,play,nameI.value,pbI.value,tagI.value);});
+  act.appendChild(cancel);act.appendChild(ok);form.appendChild(act);
+  box.appendChild(form);nameI.focus();
+  nameI.addEventListener('keydown',function(e){if(e.key==='Enter')ok.click();});
+}
+function submitForm(mode,orig,name,pb,tagsStr){
+  name=(name||'').trim();
   if(!name){alert('Please enter a name for the play.');return;}
-  var plays=getPlays(),idx=-1;
-  for(var i=0;i<plays.length;i++){if(plays[i].name===name){idx=i;break;}}
+  pb=(pb||'').trim()||'Unfiled';
+  var tags=parseTags(tagsStr),plays=getPlays();
+  var idx=-1;for(var i=0;i<plays.length;i++){if(plays[i].name===name){idx=i;break;}}
+  if(mode==='edit'){
+    var oi=-1;for(var j=0;j<plays.length;j++){if(plays[j].name===orig.name){oi=j;break;}}
+    if(oi<0){openModal();return;}
+    if(idx>=0&&idx!==oi){if(!confirm('A play named "'+name+'" already exists. Overwrite it?'))return;plays.splice(idx,1);if(idx<oi)oi--;}
+    plays[oi].name=name;plays[oi].playbook=pb;plays[oi].tags=tags;
+    setPlays(plays);openModal();return;
+  }
   if(idx<0&&plays.length>=MAXPLAYS){alert('Maximum of '+MAXPLAYS+' saved plays reached. Delete one first.');return;}
   if(idx>=0&&!confirm('A play named "'+name+'" already exists. Overwrite it?'))return;
-  var play={name:name,ts:Date.now(),ballX:ballX,players:players,routes:routes,notes:notesEl.value,assigns:assigns,zones:zones,defView:defView,flip:flip};
-  if(idx>=0)plays[idx]=play;else plays.push(play);
-  setPlays(plays);
+  var rec={name:name,ts:Date.now(),ballX:ballX,players:players,routes:routes,notes:notesEl.value,assigns:assigns,zones:zones,defView:defView,flip:flip,playbook:pb,tags:tags};
+  if(idx>=0)plays[idx]=rec;else plays.push(rec);
+  setPlays(plays);openModal();
 }
 
 function loadPlay(p){
@@ -740,32 +794,55 @@ function loadPlay(p){
 function deletePlay(name){
   if(!confirm('Delete "'+name+'"?'))return;
   setPlays(getPlays().filter(function(p){return p.name!==name;}));
-  renderList();
+  renderRows();
 }
 
 function fmtDate(ts){try{return new Date(ts).toLocaleDateString();}catch(e){return '';}}
 
 function renderList(){
-  var box=document.getElementById('modal-list');
-  box.innerHTML='';
-  var plays=getPlays().sort(function(a,b){return b.ts-a.ts;});
-  if(!plays.length){var e=document.createElement('div');e.className='empty';e.textContent='No saved plays yet.';box.appendChild(e);return;}
-  plays.forEach(function(p){
-    var row=document.createElement('div');row.className='pl';
-    var nm=document.createElement('div');nm.className='nm';nm.title='Load this play';
-    nm.appendChild(document.createTextNode(p.name));
-    var dt=document.createElement('span');dt.className='dt';dt.textContent=fmtDate(p.ts);nm.appendChild(dt);
-    nm.addEventListener('click',function(){loadPlay(p);});
-    var del=document.createElement('button');del.textContent='Delete';
-    del.addEventListener('click',function(){deletePlay(p.name);});
-    row.appendChild(nm);row.appendChild(del);box.appendChild(row);
+  document.getElementById('modal-title').textContent='Playbook';
+  var box=document.getElementById('modal-list');box.innerHTML='';
+  var tools=document.createElement('div');tools.className='tools';
+  var search=document.createElement('input');search.type='text';search.placeholder='Search name, playbook, or tag…';search.value=playFilter;
+  search.addEventListener('input',function(){playFilter=this.value;renderRows();});
+  tools.appendChild(search);box.appendChild(tools);
+  var rows=document.createElement('div');rows.id='pb-rows';box.appendChild(rows);
+  renderRows();
+}
+function renderRows(){
+  var wrap=document.getElementById('pb-rows');if(!wrap)return;wrap.innerHTML='';
+  var q=playFilter.trim().toLowerCase();
+  var plays=getPlays().filter(function(p){
+    if(!q)return true;
+    if(p.name.toLowerCase().indexOf(q)>=0)return true;
+    if(p.playbook.toLowerCase().indexOf(q)>=0)return true;
+    return p.tags.some(function(t){return t.toLowerCase().indexOf(q)>=0;});
   });
+  if(!plays.length){var e=document.createElement('div');e.className='empty';e.textContent=q?'No plays match “'+playFilter.trim()+'”.':'No saved plays yet.';wrap.appendChild(e);return;}
+  var groups={};plays.forEach(function(p){(groups[p.playbook]=groups[p.playbook]||[]).push(p);});
+  Object.keys(groups).sort().forEach(function(pb){
+    var h=document.createElement('div');h.className='grp';h.textContent=pb+' ('+groups[pb].length+')';wrap.appendChild(h);
+    groups[pb].sort(function(a,b){return b.ts-a.ts;}).forEach(function(p){wrap.appendChild(rowFor(p));});
+  });
+}
+function rowFor(p){
+  var row=document.createElement('div');row.className='pl';
+  var meta=document.createElement('div');meta.className='meta';meta.title='Load this play';
+  var nm=document.createElement('div');nm.className='nm2';nm.appendChild(document.createTextNode(p.name));
+  var dt=document.createElement('span');dt.className='dt2';dt.textContent=fmtDate(p.ts);nm.appendChild(dt);
+  meta.appendChild(nm);
+  if(p.tags.length){var chips=document.createElement('div');chips.className='chips';p.tags.forEach(function(t){var c=document.createElement('span');c.className='chip';c.textContent=t;chips.appendChild(c);});meta.appendChild(chips);}
+  meta.addEventListener('click',function(){loadPlay(p);});
+  var edit=document.createElement('button');edit.className='edit';edit.textContent='Edit';edit.addEventListener('click',function(){showForm('edit',p);});
+  var del=document.createElement('button');del.textContent='Delete';del.addEventListener('click',function(){deletePlay(p.name);});
+  row.appendChild(meta);row.appendChild(edit);row.appendChild(del);
+  return row;
 }
 
 function openModal(){renderList();document.getElementById('modal').classList.add('open');}
 function closeModal(){document.getElementById('modal').classList.remove('open');}
 
-document.getElementById('btn-saveplay').addEventListener('click',savePlay);
+document.getElementById('btn-saveplay').addEventListener('click',openSave);
 document.getElementById('btn-loadplay').addEventListener('click',openModal);
 document.getElementById('modal-close').addEventListener('click',closeModal);
 document.getElementById('modal').addEventListener('click',function(e){if(e.target===this)closeModal();});
