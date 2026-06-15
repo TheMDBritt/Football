@@ -308,19 +308,24 @@ function drawPlayer(pl){
   ctx.restore();
 }
 
+// contrast halo so play art reads on the turf: dark casing under light lines, light under dark
+function caseColor(col){return tagLum(col)>0.55?'rgba(0,0,0,0.55)':'rgba(255,255,255,0.9)';}
+function arrowHead(x2,y2,ang,hl){ctx.beginPath();ctx.moveTo(x2,y2);ctx.lineTo(x2-hl*Math.cos(ang-0.42),y2-hl*Math.sin(ang-0.42));ctx.lineTo(x2-hl*Math.cos(ang+0.42),y2-hl*Math.sin(ang+0.42));ctx.closePath();ctx.fill();}
 function drawArrow(x1,y1,x2,y2,col){
-  var dx=x2-x1,dy=y2-y1,ang=Math.atan2(dy,dx);
-  ctx.save();ctx.strokeStyle=col;ctx.fillStyle=col;ctx.lineWidth=2.5;ctx.lineCap='round';
-  ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();
-  ctx.beginPath();ctx.moveTo(x2,y2);
-  ctx.lineTo(x2-12*Math.cos(ang-0.4),y2-12*Math.sin(ang-0.4));
-  ctx.lineTo(x2-12*Math.cos(ang+0.4),y2-12*Math.sin(ang+0.4));
-  ctx.closePath();ctx.fill();ctx.restore();
+  var ang=Math.atan2(y2-y1,x2-x1),cc=caseColor(col);
+  ctx.save();ctx.lineCap='round';ctx.lineJoin='round';
+  ctx.strokeStyle=cc;ctx.fillStyle=cc;ctx.lineWidth=6.4;
+  ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();arrowHead(x2,y2,ang,16);
+  ctx.strokeStyle=col;ctx.fillStyle=col;ctx.lineWidth=3.3;
+  ctx.beginPath();ctx.moveTo(x1,y1);ctx.lineTo(x2,y2);ctx.stroke();arrowHead(x2,y2,ang,13);
+  ctx.restore();
 }
 function drawArc(x1,y1,x2,y2,col){
-  var mx=(x1+x2)/2,my=Math.min(y1,y2)-30;
-  ctx.save();ctx.strokeStyle=col;ctx.lineWidth=2.5;ctx.lineCap='round';
-  ctx.beginPath();ctx.moveTo(x1,y1);ctx.quadraticCurveTo(mx,my,x2,y2);ctx.stroke();ctx.restore();
+  var mx=(x1+x2)/2,my=Math.min(y1,y2)-32,cc=caseColor(col);
+  ctx.save();ctx.lineCap='round';
+  ctx.strokeStyle=cc;ctx.lineWidth=6.4;ctx.beginPath();ctx.moveTo(x1,y1);ctx.quadraticCurveTo(mx,my,x2,y2);ctx.stroke();
+  ctx.strokeStyle=col;ctx.lineWidth=3.3;ctx.beginPath();ctx.moveTo(x1,y1);ctx.quadraticCurveTo(mx,my,x2,y2);ctx.stroke();
+  ctx.restore();
 }
 
 function render(){
@@ -328,8 +333,11 @@ function render(){
   drawField();
   zones.forEach(drawZone);
   routes.forEach(function(r){
-    ctx.save();ctx.strokeStyle=r.col;ctx.lineWidth=2.5;ctx.lineCap='round';ctx.lineJoin='round';
-    if(r.type==='route'){ctx.setLineDash([6,3]);ctx.beginPath();r.pts.forEach(function(p,i){i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y);});ctx.stroke();ctx.setLineDash([]);}
+    ctx.save();ctx.lineCap='round';ctx.lineJoin='round';
+    if(r.type==='route'){
+      ctx.strokeStyle=caseColor(r.col);ctx.lineWidth=6;ctx.beginPath();r.pts.forEach(function(p,i){i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y);});ctx.stroke();
+      ctx.strokeStyle=r.col;ctx.lineWidth=3.3;ctx.setLineDash([7,4]);ctx.beginPath();r.pts.forEach(function(p,i){i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y);});ctx.stroke();ctx.setLineDash([]);
+    }
     else if(r.type==='tree'){if(play!=='run')drawTree(r);}
     else if(r.type==='arrow'){drawArrow(r.x1,r.y1,r.x2,r.y2,r.col);}
     else{drawArc(r.x1,r.y1,r.x2,r.y2,r.col);}
@@ -340,8 +348,8 @@ function render(){
     ctx.beginPath();curPts.forEach(function(p,i){i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y);});
     ctx.stroke();ctx.setLineDash([]);ctx.restore();
   }
-  assigns.forEach(function(a){if(play==='run'&&a.phase==='pass')return;if(play==='pass'&&a.phase==='run')return;drawAssign(a);});
   players.forEach(drawPlayer);
+  assigns.forEach(function(a){if(play==='run'&&a.phase==='pass')return;if(play==='pass'&&a.phase==='run')return;drawAssign(a);});
   drawBall();
   ctx.restore();
 }
@@ -923,7 +931,7 @@ function exportPNG(){
 }
 
 /* ---- Run fit / Pass rush / Coverage ---- */
-var RFCOL='#e23b3b',PRCOL='#101010',CVCOL='#f5f5f5';
+var RFCOL='#e23b3b',PRCOL='#ff8c1a',CVCOL='#f5f5f5';
 function kindCol(k){return (k==='run'||k==='runfit')?RFCOL:(k==='rush'||k==='passrush')?PRCOL:CVCOL;}
 function clearForPhase(pid,phase){assigns=assigns.filter(function(a){if(a.pid!==pid)return true;if(phase==='both')return false;if(phase==='run')return !(a.phase==='run'||a.phase==='both');return !(a.phase==='pass'||a.phase==='both');});}
 function isDL(p){return p.label==='3T'||p.label==='1T'||p.label==='DE'||p.label==='NT';}
@@ -980,15 +988,15 @@ function targetForRole(p,role){
 
 function drawCurvedArrow(x1,y1,x2,y2,col){
   var dx=x2-x1,dy=y2-y1,len=Math.hypot(dx,dy)||1;
-  var nx=-dy/len,ny=dx/len,off=Math.min(45,len*0.45);
+  var nx=-dy/len,ny=dx/len,off=Math.min(60,len*0.55);
   var cx=(x1+x2)/2+nx*off,cy=(y1+y2)/2+ny*off;
-  ctx.save();ctx.strokeStyle=col;ctx.fillStyle=col;ctx.lineWidth=2.5;ctx.lineCap='round';
-  ctx.beginPath();ctx.moveTo(x1,y1);ctx.quadraticCurveTo(cx,cy,x2,y2);ctx.stroke();
-  var ang=Math.atan2(y2-cy,x2-cx);
-  ctx.beginPath();ctx.moveTo(x2,y2);
-  ctx.lineTo(x2-13*Math.cos(ang-0.4),y2-13*Math.sin(ang-0.4));
-  ctx.lineTo(x2-13*Math.cos(ang+0.4),y2-13*Math.sin(ang+0.4));
-  ctx.closePath();ctx.fill();ctx.restore();
+  var ang=Math.atan2(y2-cy,x2-cx),cc=caseColor(col);
+  ctx.save();ctx.lineCap='round';ctx.lineJoin='round';
+  ctx.strokeStyle=cc;ctx.fillStyle=cc;ctx.lineWidth=6.4;
+  ctx.beginPath();ctx.moveTo(x1,y1);ctx.quadraticCurveTo(cx,cy,x2,y2);ctx.stroke();arrowHead(x2,y2,ang,16);
+  ctx.strokeStyle=col;ctx.fillStyle=col;ctx.lineWidth=3.3;
+  ctx.beginPath();ctx.moveTo(x1,y1);ctx.quadraticCurveTo(cx,cy,x2,y2);ctx.stroke();arrowHead(x2,y2,ang,13);
+  ctx.restore();
 }
 function tagLum(col){var h=col.replace('#','');if(h.length===3)h=h[0]+h[0]+h[1]+h[1]+h[2]+h[2];var r=parseInt(h.substr(0,2),16),g=parseInt(h.substr(2,2),16),b=parseInt(h.substr(4,2),16);return (0.299*r+0.587*g+0.114*b)/255;}
 function drawTag(x,y,text,col){
@@ -1199,7 +1207,7 @@ function techX(ref,off,s){
   return Math.round(base+s*off*sh);
 }
 var FRONTS={
-  over:[{ref:'C',off:-1,w:1,tag:'1'},{ref:'G',off:1,w:0,tag:'3'},{ref:'T',off:1,w:0,tag:'5'},{ref:'T',off:1,w:1,tag:'5'}],
+  over:[{ref:'C',off:1,w:1,tag:'1'},{ref:'G',off:1,w:0,tag:'3'},{ref:'T',off:1,w:0,tag:'5'},{ref:'T',off:1,w:1,tag:'5'}],
   under:[{ref:'C',off:1,w:0,tag:'1'},{ref:'G',off:1,w:1,tag:'3'},{ref:'E',off:1,w:0,tag:'9'},{ref:'T',off:1,w:1,tag:'5'}],
   tite:[{ref:'C',off:0,w:0,tag:'0'},{ref:'T',off:-1,w:0,tag:'4i'},{ref:'T',off:-1,w:1,tag:'4i'},{ref:'E',off:1,w:0,tag:'9'}],
   mint:[{ref:'C',off:0,w:0,tag:'0'},{ref:'T',off:-1,w:0,tag:'4i'},{ref:'T',off:-1,w:1,tag:'4i'},{ref:'E',off:1,w:1,tag:'5'}],
@@ -1288,16 +1296,16 @@ function teGame(side,deFirst){
     if(p.label==='DE'&&(p.x-ballX)*side>0){var e=Math.abs(p.x-ballX);if(e>ded){ded=e;de=p;}}
   });
   if(!dt||!de)return false;
-  var inside={x:ballX+side*OL_G*0.5,y:LOS};
-  var contain={x:ballX+side*(Dg+r*2),y:LOS-Math.round(1.5*YD_V)};
-  if(deFirst){gamePush(de,'crash',inside,false);gamePush(dt,'contain',contain,true);}
-  else{gamePush(dt,'crash',inside,false);gamePush(de,'contain',contain,true);}
+  var inside={x:ballX+side*OL_G*0.4,y:LOS+Math.round(1.4*YD_V)};   // knife inside the guard into the backfield
+  var contain={x:ballX+side*(Dg+r*2.2),y:LOS+Math.round(0.4*YD_V)}; // loop around behind to contain
+  if(deFirst){gamePush(de,'crash',inside,true);gamePush(dt,'contain',contain,true);}
+  else{gamePush(dt,'crash',inside,true);gamePush(de,'contain',contain,true);}
   return true;
 }
 function twistDTs(){
   var t3=defByLabel('3T')[0],t1=defByLabel('1T')[0];if(!t3||!t1)return false;
-  gamePush(t3,'cross',{x:ballX+OL_G*0.5,y:LOS},true);
-  gamePush(t1,'cross',{x:ballX-OL_G*0.5,y:LOS},true);
+  gamePush(t3,'cross',{x:ballX+OL_G*0.8,y:LOS+Math.round(1.8*YD_V)},false);
+  gamePush(t1,'cross',{x:ballX-OL_G*0.8,y:LOS+Math.round(1.8*YD_V)},false);
   return true;
 }
 var TEAMSTUNT={
@@ -1461,13 +1469,12 @@ function routePoints(p,c,stem){
 function drawTree(r){
   var pl=playerById(r.pid);if(!pl)return;
   var pts=routePoints(pl,r.concept,r.stem);
-  ctx.strokeStyle=r.col;ctx.lineWidth=2.5;ctx.lineCap='round';ctx.lineJoin='round';
-  ctx.beginPath();pts.forEach(function(p,i){i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y);});ctx.stroke();
-  var a=pts[pts.length-2],b=pts[pts.length-1],ang=Math.atan2(b.y-a.y,b.x-a.x);
-  ctx.fillStyle=r.col;ctx.beginPath();ctx.moveTo(b.x,b.y);
-  ctx.lineTo(b.x-11*Math.cos(ang-0.4),b.y-11*Math.sin(ang-0.4));
-  ctx.lineTo(b.x-11*Math.cos(ang+0.4),b.y-11*Math.sin(ang+0.4));
-  ctx.closePath();ctx.fill();
+  var a=pts[pts.length-2],b=pts[pts.length-1],ang=Math.atan2(b.y-a.y,b.x-a.x),cc=caseColor(r.col);
+  ctx.lineCap='round';ctx.lineJoin='round';
+  ctx.strokeStyle=cc;ctx.fillStyle=cc;ctx.lineWidth=6.4;
+  ctx.beginPath();pts.forEach(function(p,i){i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y);});ctx.stroke();arrowHead(b.x,b.y,ang,16);
+  ctx.strokeStyle=r.col;ctx.fillStyle=r.col;ctx.lineWidth=3.3;
+  ctx.beginPath();pts.forEach(function(p,i){i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y);});ctx.stroke();arrowHead(b.x,b.y,ang,13);
   if(tool==='assign'&&play==='pass'){var hb=pts[1]||b;ctx.fillStyle='#fff';ctx.strokeStyle=r.col;ctx.lineWidth=2;ctx.beginPath();ctx.arc(hb.x,hb.y,5,0,Math.PI*2);ctx.fill();ctx.stroke();}
 }
 function hitStem(x,y){
