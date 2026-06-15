@@ -137,6 +137,9 @@ canvas{display:block;width:100%;touch-action:none;cursor:crosshair}
       <option value="3">Cover 3</option>
       <option value="4">Cover 4</option>
       <option value="palm">Cover 4 Palms</option>
+      <option value="6">Cover 6</option>
+      <option value="2man">2-Man</option>
+      <option value="ripliz">Rip/Liz (match 3)</option>
     </select>
     <label>Pressure:</label>
     <select id="sel-press">
@@ -1349,7 +1352,7 @@ function applyCoverage(scheme,internal){
   var fs=defByLabel('FS')[0],ss=defByLabel('SS')[0],mike=defByLabel('MIKE')[0],will=defByLabel('WILL')[0],nick=defByLabel('NICK')[0];
   function P(p,x,y){if(p){p.x=Math.round(x);p.y=Math.round(y);}}
   var deepY=LOS-Math.round(14*YD_V),offY=LOS-Math.round(7*YD_V),uy=LOS-Math.round(5*YD_V),midY=LOS-Math.round(10*YD_V);
-  var cbBase={'2':7,'3':10,'4':8,'palm':8}[scheme]||7;
+  var cbBase={'2':7,'3':10,'4':8,'palm':8,'6':8,'2man':5,'ripliz':10}[scheme]||7;
   var sg=cbBase>=7?1.5:(cbBase>=3?1:0.5);
   var bD=Math.max(1,cbBase-sg),fD=cbBase+sg;
   var cbDepL=hash<0?bD:hash>0?fD:cbBase,cbDepR=hash>0?bD:hash<0?fD:cbBase;
@@ -1386,6 +1389,35 @@ function applyCoverage(scheme,internal){
     setCov(cbs[0],'Deep ¼',qR,dRy,loX,deepY);setCov(cbs[1],'Deep ¼',qR,dRy,hiX,deepY);
     setCov(fs,'Deep ¼',qR,dRy);setCov(ss,'Deep ¼',qR,dRy);
     setCov(nick,'Wall 2',uR,uRy);setCov(will,'Hook/Curl',uR,uRy);setCov(mike,'Match 3',uR,uRy);
+  }else if(scheme==='6'){
+    // Quarter-quarter-half: field plays Quarters, boundary plays Cover 2
+    var fS=ballX<W/2?1:-1,fCl=fS>0?clR:clL;
+    var fCB=fS>0?cbs[1]:cbs[0],bCB=fS>0?cbs[0]:cbs[1];
+    var fSaf=fS>0?ss:fs,bSaf=fS>0?fs:ss,fX=fS>0?hiX:loX,bX=fS>0?loX:hiX;
+    P(fCB,fX,cbR);P(fSaf,ballX+fS*Math.round(span*0.2),deepY);
+    setCov(fCB,'Deep ¼',qR,dRy,fX,deepY);setCov(fSaf,'Deep ¼',qR,dRy,ballX+fS*Math.round(span*0.22),deepY);
+    P(bCB,bX,LOS-Math.round(5*YD_V));P(bSaf,ballX-fS*Math.round(span*0.26),deepY);
+    setCov(bCB,'Flat',uR,uRy,bX,uy);setCov(bSaf,'Deep ½',hR,dRy,ballX-fS*Math.round(span*0.26),deepY);
+    P(nick,fCl,uy);P(will,bxL,uy);P(mike,bxR,uy);
+    setCov(nick,'Curl/Flat',uR,uRy,fCl,uy);setCov(will,'Hook',uR,uRy);setCov(mike,'Hook',uR,uRy);
+  }else if(scheme==='2man'){
+    // Two deep halves with man-under trail technique
+    manScheme='2man';
+    P(fs,ballX-Math.round(span*0.26),deepY);P(ss,ballX+Math.round(span*0.26),deepY);
+    setCov(fs,'Deep ½',hR,dRy,ballX-Math.round(span*0.26),deepY);setCov(ss,'Deep ½',hR,dRy,ballX+Math.round(span*0.26),deepY);
+    var rc=getReceivers();
+    if(rc.length&&cbs[0]){alignOver(cbs[0],rc[0]);manOn(cbs[0],rc[0]);}
+    if(rc.length>1&&cbs[1]){alignOver(cbs[1],rc[rc.length-1]);manOn(cbs[1],rc[rc.length-1]);}
+    var mids=rc.slice(1,Math.max(1,rc.length-1)),pool=[nick,will,mike].filter(Boolean),mp=0;
+    mids.forEach(function(r){var d=pool[mp++];if(d){alignOver(d,r);manOn(d,r);}});
+    manScheme='';
+  }else if(scheme==='ripliz'){
+    // Matched Cover 3 (Rip/Liz): 3 deep thirds, seam/wall apex carries #2
+    P(cbs[0],loX,cbL);P(cbs[1],hiX,cbR);
+    P(fs,ballX,deepY);P(ss,ballX+strong*Math.round(span*0.22),deepY);
+    P(nick,strongCl,uy);P(will,bxL,uy);P(mike,bxR,uy);
+    setCov(cbs[0],'Deep ⅓',dR,dRy,loX,deepY);setCov(fs,'Deep ⅓',dR,dRy,ballX,deepY);setCov(cbs[1],'Deep ⅓',dR,dRy,hiX,deepY);
+    setCov(nick,'Seam/Wall',uR,uRy);setCov(ss,'Seam/Wall',uR,uRy,weakCl,uy);setCov(will,'Hook',uR,uRy);setCov(mike,'Hook',uR,uRy);
   }else if(scheme==='1'){
     manScheme='1';manCover(true);manScheme='';
     if(fs){fs.x=ballX-strong*Math.round(span*0.22);fs.y=deepY;}
