@@ -337,6 +337,7 @@ function render(){
     if(r.type==='route'){
       ctx.strokeStyle=caseColor(r.col);ctx.lineWidth=6;ctx.beginPath();r.pts.forEach(function(p,i){i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y);});ctx.stroke();
       ctx.strokeStyle=r.col;ctx.lineWidth=3.3;ctx.setLineDash([7,4]);ctx.beginPath();r.pts.forEach(function(p,i){i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y);});ctx.stroke();ctx.setLineDash([]);
+      var lp=r.pts,n=lp.length;if(n>1){var aa=Math.atan2(lp[n-1].y-lp[n-2].y,lp[n-1].x-lp[n-2].x);ctx.fillStyle=caseColor(r.col);arrowHead(lp[n-1].x,lp[n-1].y,aa,15);ctx.fillStyle=r.col;arrowHead(lp[n-1].x,lp[n-1].y,aa,12);}
     }
     else if(r.type==='tree'){if(play!=='run')drawTree(r);}
     else if(r.type==='arrow'){drawArrow(r.x1,r.y1,r.x2,r.y2,r.col);}
@@ -1031,7 +1032,8 @@ function drawAssign(a){
   }
   if(a.curve)drawCurvedArrow(p.x,p.y,a.tx,a.ty,col);
   else drawArrow(p.x,p.y,a.tx,a.ty,col);
-  drawTag(a.tx,a.ty,a.role,col);
+  // line-game actions (crash/contain/cross) read from the arrows themselves — no text tag to pile up
+  if(!/^(crash|contain|cross)$/.test(a.role))drawTag(a.tx,a.ty,a.role,col);
 }
 function drawZone(z){
   ctx.save();
@@ -1220,7 +1222,7 @@ function applyFront(front,internal){
   curFront=front;
   if(!internal)saveH();
   var s=frontDir();
-  var DLY=LOS-Math.round(1.2*YD_V),EDY=LOS-Math.round(1*YD_V);
+  var DLY=LOS-Math.round(1.8*YD_V),EDY=LOS-Math.round(1.6*YD_V);
   var dl=players.filter(function(p){return p.color===D&&isDL(p);});
   if(dl.length>=4){
     var targets=FRONTS[front].map(function(t){return {x:techX(t.ref,t.off,t.w?-s:s),tag:t.tag,edge:t.ref==='E'};});
@@ -1296,16 +1298,17 @@ function teGame(side,deFirst){
     if(p.label==='DE'&&(p.x-ballX)*side>0){var e=Math.abs(p.x-ballX);if(e>ded){ded=e;de=p;}}
   });
   if(!dt||!de)return false;
-  var inside={x:ballX+side*OL_G*0.4,y:LOS+Math.round(1.4*YD_V)};   // knife inside the guard into the backfield
-  var contain={x:ballX+side*(Dg+r*2.2),y:LOS+Math.round(0.4*YD_V)}; // loop around behind to contain
-  if(deFirst){gamePush(de,'crash',inside,true);gamePush(dt,'contain',contain,true);}
-  else{gamePush(dt,'crash',inside,true);gamePush(de,'contain',contain,true);}
+  var crasher=deFirst?de:dt,looper=deFirst?dt:de;
+  // crasher knifes a couple yards into the gap just inside his own alignment, barely past the LOS
+  gamePush(crasher,'crash',{x:crasher.x-side*Math.round(2*YD),y:LOS+Math.round(0.6*YD_V)},true);
+  // looper loops over the top to contain off the edge
+  gamePush(looper,'contain',{x:ballX+side*(Dg+r*2),y:LOS-Math.round(0.3*YD_V)},true);
   return true;
 }
 function twistDTs(){
   var t3=defByLabel('3T')[0],t1=defByLabel('1T')[0];if(!t3||!t1)return false;
-  gamePush(t3,'cross',{x:ballX+OL_G*0.8,y:LOS+Math.round(1.8*YD_V)},false);
-  gamePush(t1,'cross',{x:ballX-OL_G*0.8,y:LOS+Math.round(1.8*YD_V)},false);
+  gamePush(t3,'cross',{x:ballX+OL_G*0.7,y:LOS+Math.round(0.9*YD_V)},false);
+  gamePush(t1,'cross',{x:ballX-OL_G*0.7,y:LOS+Math.round(0.9*YD_V)},false);
   return true;
 }
 var TEAMSTUNT={
