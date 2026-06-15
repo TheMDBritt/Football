@@ -339,6 +339,7 @@ function drawArc(x1,y1,x2,y2,col){
 }
 
 function render(){
+  _placedTags=[];
   ctx.save();if(defView){ctx.translate(0,H);ctx.scale(1,-1);}
   drawField();
   zones.forEach(drawZone);
@@ -1068,14 +1069,35 @@ function drawCurvedArrow(x1,y1,x2,y2,col,bow){
   ctx.beginPath();ctx.moveTo(x1,y1);ctx.quadraticCurveTo(cx,cy,x2,y2);ctx.stroke();arrowHead(x2,y2,ang,13);
   ctx.restore();
 }
+// "loop around the corner" arc — goes laterally first then dips past the LOS (TEX/ET contain path)
+function drawLoopArrow(x1,y1,x2,y2,col){
+  // control: extend past x2 in the direction of travel, stay at y1 height → classic J-arc
+  var cx=x2+(x2-x1)*0.22,cy=y1;
+  var ang=Math.atan2(y2-cy,x2-cx),cc=caseColor(col);
+  ctx.save();ctx.lineCap='round';ctx.lineJoin='round';
+  ctx.strokeStyle=cc;ctx.fillStyle=cc;ctx.lineWidth=6.4;
+  ctx.beginPath();ctx.moveTo(x1,y1);ctx.quadraticCurveTo(cx,cy,x2,y2);ctx.stroke();arrowHead(x2,y2,ang,16);
+  ctx.strokeStyle=col;ctx.fillStyle=col;ctx.lineWidth=3.3;
+  ctx.beginPath();ctx.moveTo(x1,y1);ctx.quadraticCurveTo(cx,cy,x2,y2);ctx.stroke();arrowHead(x2,y2,ang,13);
+  ctx.restore();
+}
 function tagLum(col){var h=col.replace('#','');if(h.length===3)h=h[0]+h[0]+h[1]+h[1]+h[2]+h[2];var r=parseInt(h.substr(0,2),16),g=parseInt(h.substr(2,2),16),b=parseInt(h.substr(4,2),16);return (0.299*r+0.587*g+0.114*b)/255;}
+var _placedTags=[];
 function drawTag(x,y,text,col){
   ctx.save();
   var fsz=Math.max(10,Math.round(W/76));
   ctx.font='bold '+fsz+'px sans-serif';
   ctx.textAlign='center';ctx.textBaseline='middle';
-  var tw=ctx.measureText(text).width+10,th=fsz+7;
+  var tw=ctx.measureText(text).width+10,th=fsz+8;
   var lift=R()+Math.round(th*0.65),ty=defView?(y+lift):(y-lift);
+  // nudge vertically if this label overlaps an already-placed one
+  for(var _i=0;_i<_placedTags.length;_i++){
+    var _p=_placedTags[_i];
+    if(Math.abs(_p.x-x)<(tw+_p.tw)*0.5+2&&Math.abs(_p.ty-ty)<th){
+      ty=defView?(_p.ty+th*1.25):(_p.ty-th*1.25);
+    }
+  }
+  _placedTags.push({x:x,ty:ty,tw:tw});
   var bx=x-tw/2,by=ty-th/2;
   ctx.fillStyle=tagLum(col)>0.6?'rgba(12,12,12,0.92)':'rgba(248,248,248,0.96)';
   ctx.beginPath();if(ctx.roundRect){ctx.roundRect(bx,by,tw,th,4);}else{ctx.rect(bx,by,tw,th);}ctx.fill();
@@ -1102,7 +1124,8 @@ function drawAssign(a){
   // start arrow from edge of player circle, not center, so it doesn't cover the token
   var r0=R(),ddx=a.tx-p.x,ddy=a.ty-p.y,dlen=Math.hypot(ddx,ddy)||1;
   var sx=p.x+r0*ddx/dlen,sy=p.y+r0*ddy/dlen;
-  if(a.curve)drawCurvedArrow(sx,sy,a.tx,a.ty,col,a.bow||1);
+  if(a.loop)drawLoopArrow(sx,sy,a.tx,a.ty,col);
+  else if(a.curve)drawCurvedArrow(sx,sy,a.tx,a.ty,col,a.bow||1);
   else drawArrow(sx,sy,a.tx,a.ty,col);
   // line-game actions (crash/contain/cross) read from the arrows themselves — no text tag to pile up
   if(!/^(crash|contain|cross)$/i.test(a.role))drawTag(a.tx,a.ty,a.role,col);
@@ -1148,15 +1171,15 @@ function addStunt(pi,stunt){
   function pickDT(){var c=null,cd=1e9;players.forEach(function(p){if(p.color===D&&p.dt&&(p.x-ballX)*s>=0){var d=Math.abs(p.x-ballX);if(d<cd){cd=d;c=p;}}});return c;}
   function pickDE(){var c=null,cd=-1;players.forEach(function(p){if(p.color===D&&p.label==='DE'&&(p.x-ballX)*s>0){var d=Math.abs(p.x-ballX);if(d>cd){cd=d;c=p;}}});return c;}
   var Dg=OL_G+OL_T+r*3.2;
-  var inside={x:Math.round(ballX+s*OL_G*0.5),y:LOS};
-  var contain={x:Math.round(ballX+s*(Dg+r*2.5)),y:Math.round(LOS+0.8*YD_V)};
-  function push(p,role,t,curve,bow){if(p){clearForPhase(p.id,'pass');var a={pid:p.id,phase:'pass',kind:'rush',role:role,tx:t.x,ty:t.y,curve:curve};if(bow!=null)a.bow=bow;assigns.push(a);}}
+  function push(p,role,t,loop){if(p){clearForPhase(p.id,'pass');var a={pid:p.id,phase:'pass',kind:'rush',role:role,tx:Math.round(t.x),ty:Math.round(t.y),curve:false};if(loop)a.loop=true;assigns.push(a);}}
   if(stunt.indexOf('TEX')===0){
     var dt=pickDT(),de=pickDE();if(!dt||!de)return;saveH();
-    push(de,'crash',inside,false,1);push(dt,'contain',contain,true,-1);
+    push(de,'crash',{x:de.x-s*Math.round(2*YD),y:LOS+Math.round(0.6*YD_V)});
+    push(dt,'contain',{x:de.x,y:LOS+Math.round(0.9*YD_V)},true);
   }else if(stunt.indexOf('ET')===0){
     var dt2=pickDT(),de2=pickDE();if(!dt2||!de2)return;saveH();
-    push(dt2,'crash',inside,false,1);push(de2,'contain',contain,true,-1);
+    push(dt2,'crash',{x:dt2.x-s*Math.round(2*YD),y:LOS+Math.round(0.6*YD_V)});
+    push(de2,'contain',{x:dt2.x,y:LOS+Math.round(0.9*YD_V)},true);
   }else{
     var dts=interiorDTs();if(dts.length<2)return;saveH();var tL=dts[0],tR=dts[dts.length-1];
     push(tR,'cross',{x:Math.round(ballX-OL_G*0.5),y:LOS},true);
@@ -1360,7 +1383,7 @@ function refitDefense(){
 
 /* ---- Team stunts / line games (one-click DL games) ---- */
 document.getElementById('sel-stunt').addEventListener('change',function(){applyTeamStunt(this.value);this.value='';});
-function gamePush(p,role,t,curve,bow){if(p){clearForPhase(p.id,'pass');var a={pid:p.id,phase:'pass',kind:'rush',role:role,tx:Math.round(t.x),ty:Math.round(t.y),curve:!!curve};if(bow!=null)a.bow=bow;assigns.push(a);}}
+function gamePush(p,role,t,curve,bow,loop){if(p){clearForPhase(p.id,'pass');var a={pid:p.id,phase:'pass',kind:'rush',role:role,tx:Math.round(t.x),ty:Math.round(t.y),curve:!!curve};if(bow!=null)a.bow=bow;if(loop)a.loop=true;assigns.push(a);}}
 // deFirst=true -> TEX (end crashes inside, tackle loops to contain); false -> ET (tackle in, end contains)
 function teGame(side,deFirst){
   var r=R(),Dg=OL_G+OL_T+r*3.2,dt=null,dtd=1e9,de=null,ded=-1;
@@ -1371,10 +1394,11 @@ function teGame(side,deFirst){
   });
   if(!dt||!de)return false;
   var crasher=deFirst?de:dt,looper=deFirst?dt:de;
-  // crasher knifes a couple yards into the gap just inside his own alignment, barely past the LOS
-  gamePush(crasher,'crash',{x:crasher.x-side*Math.round(2*YD),y:LOS+Math.round(0.6*YD_V)},true,1);
-  // looper arcs over the crash path and contains off the edge past the LOS; bow=-1 curves it outward
-  gamePush(looper,'contain',{x:ballX+side*(Dg+r*2.5),y:LOS+Math.round(0.8*YD_V)},true,-1);
+  // crasher: straight diagonal down-and-inside (sharp gap penetration)
+  gamePush(crasher,'crash',{x:crasher.x-side*Math.round(2*YD),y:LOS+Math.round(0.6*YD_V)},false);
+  // looper: J-arc that sweeps laterally past the crasher's lane then hooks down to contain edge
+  // target = crasher's original outside edge so looper fills the vacated gap
+  gamePush(looper,'contain',{x:crasher.x,y:LOS+Math.round(0.9*YD_V)},false,null,true);
   return true;
 }
 function twistDTs(){
