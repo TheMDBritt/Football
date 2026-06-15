@@ -158,7 +158,6 @@ canvas{display:block;width:100%;touch-action:none;cursor:crosshair}
       <option value="et_strong">ET (strong)</option>
       <option value="et_weak">ET (weak)</option>
       <option value="twist">Twist (DTs cross)</option>
-      <option value="pirate">Pirate (both DEs crash inside)</option>
     </select>
     <button id="btn-addzone">+ Zone</button>
     <div class="sep"></div>
@@ -362,7 +361,15 @@ function render(){
   ctx.restore();
 }
 
-function mk(x,y,lb,sh,col,lk,dl){return{id:nextId(),x:x,y:y,label:lb,shape:sh||'circle',color:col,locked:!!lk,dl:dl||null};}
+function mk(x,y,lb,sh,col,lk,dl,dt){return{id:nextId(),x:x,y:y,label:lb,shape:sh||'circle',color:col,locked:!!lk,dl:dl||null,dt:!!dt};}
+// interior DT technique name from horizontal offset to the ball/center (0,1,2i,2,3,4i,4,5)
+function dtTech(dx){
+  var G=OL_G,T=OL_T,r=R(),ax=Math.abs(dx);
+  var anchors=[{t:'0',d:0},{t:'1',d:G*0.5},{t:'2i',d:G*0.82},{t:'2',d:G},{t:'3',d:G+T*0.35},{t:'4i',d:G+T*0.68},{t:'4',d:G+T},{t:'5',d:G+T+r*1.5}];
+  var best=anchors[0],bd=1e9;anchors.forEach(function(o){var dd=Math.abs(ax-o.d);if(dd<bd){bd=dd;best=o;}});
+  return best.t;
+}
+function updateDTLabel(p){if(p&&p.dt){p.label=dtTech(p.x-ballX);p.dl=null;}}
 
 function OL(){
   return[
@@ -496,8 +503,8 @@ function autoDef(key){
   var willX=ballX-Math.round(3.5*YD);
   var mikeX=ballX+Math.round(1.5*YD);
   return[
-    mk(ballX-Math.round(2*YD),DLY,'3T','circle',D),
-    mk(ballX+Math.round(2*YD),DLY,'1T','circle',D),
+    mk(ballX-Math.round(2*YD),DLY,dtTech(-2*YD),'circle',D,false,null,true),
+    mk(ballX+Math.round(2*YD),DLY,dtTech(2*YD),'circle',D,false,null,true),
     mk(ballX-Math.round(4.5*YD),DLY,'DE','circle',D),
     mk(ballX+Math.round(4.5*YD),DLY,'DE','circle',D),
     mk(willX,WILLY,'WILL','circle',D,false,'5 yds'),
@@ -740,7 +747,7 @@ function onDown(pos){
   else if(tool==='block')arcStart=pos;
 }
 function onMove(pos){
-  if(dragIdx>=0){players[dragIdx].x=pos.x-dragOff.x;players[dragIdx].y=pos.y-dragOff.y;render();return;}
+  if(dragIdx>=0){players[dragIdx].x=pos.x-dragOff.x;players[dragIdx].y=pos.y-dragOff.y;updateDTLabel(players[dragIdx]);render();return;}
   if(dragAssign>=0){var da=assigns[dragAssign];if(da.shape==='circle'&&dragMode==='resize'){da.rx=Math.max(16,Math.abs(pos.x-da.tx));da.ry=Math.max(12,Math.abs(pos.y-da.ty));}else{da.tx=pos.x;da.ty=pos.y;}render();return;}
   if(stemDrag>=0){var rt=routes[stemDrag],rpl=playerById(rt.pid);if(rpl)rt.stem=Math.max(Math.round(2*YD_V),rpl.y-pos.y);render();return;}
   if(zoneDrag){var z=zones[zoneDrag.i];if(zoneDrag.mode==='move'){z.x=pos.x-zoneDrag.ox;z.y=pos.y-zoneDrag.oy;}else{z.rx=Math.max(16,Math.abs(pos.x-z.x));z.ry=Math.max(12,Math.abs(pos.y-z.y));}render();return;}
@@ -851,6 +858,8 @@ function loadPlay(p){
   routes=JSON.parse(JSON.stringify(p.routes||[]));
   assigns=JSON.parse(JSON.stringify(p.assigns||[]));
   zones=JSON.parse(JSON.stringify(p.zones||[]));
+  // back-compat: older saves used fixed 1T/3T labels — promote to dynamic interior-DT tech naming
+  players.forEach(function(pl){if(!pl.dt&&(pl.label==='1T'||pl.label==='3T')){pl.dt=true;updateDTLabel(pl);}});
   ensureIds();normalizeAssigns();
   defView=!!p.defView;document.getElementById('btn-defview').classList.toggle('act',defView);
   flip=!!p.flip;var fb=document.getElementById('btn-flip');if(fb)fb.classList.toggle('act',flip);
@@ -961,7 +970,8 @@ function exportPNG(){
 var RFCOL='#e23b3b',PRCOL='#ff8c1a',CVCOL='#f5f5f5';
 function kindCol(k){return (k==='run'||k==='runfit')?RFCOL:(k==='rush'||k==='passrush')?PRCOL:CVCOL;}
 function clearForPhase(pid,phase){assigns=assigns.filter(function(a){if(a.pid!==pid)return true;if(phase==='both')return false;if(phase==='run')return !(a.phase==='run'||a.phase==='both');return !(a.phase==='pass'||a.phase==='both');});}
-function isDL(p){return p.label==='3T'||p.label==='1T'||p.label==='DE'||p.label==='NT';}
+function isDL(p){return p.dt||p.label==='DE'||p.label==='NT';}
+function interiorDTs(){return players.filter(function(p){return p.color===D&&p.dt;}).sort(function(a,b){return a.x-b.x;});}
 function isDeepRole(r){return /^Deep/.test(r||'');}
 function isDeepDefender(p){return !!p&&(p.label==='CB'||p.label==='FS'||p.label==='SS');}
 function normalizeAssigns(){assigns.forEach(function(a){if(a.kind==='runfit')a.kind='run';else if(a.kind==='passrush')a.kind='rush';else if(a.kind==='coverage')a.kind='cover';if(!a.phase)a.phase=(a.kind==='run')?'run':'pass';});}
@@ -1103,7 +1113,7 @@ function addAssign(pi,role,menuKind){
 }
 function addStunt(pi,stunt){
   var clicked=players[pi],s=clicked.x<ballX?-1:1,r=R();
-  function pickDT(){var c=null,cd=1e9;players.forEach(function(p){if(p.color===D&&(p.label==='3T'||p.label==='1T')&&(p.x-ballX)*s>=0){var d=Math.abs(p.x-ballX);if(d<cd){cd=d;c=p;}}});return c;}
+  function pickDT(){var c=null,cd=1e9;players.forEach(function(p){if(p.color===D&&p.dt&&(p.x-ballX)*s>=0){var d=Math.abs(p.x-ballX);if(d<cd){cd=d;c=p;}}});return c;}
   function pickDE(){var c=null,cd=-1;players.forEach(function(p){if(p.color===D&&p.label==='DE'&&(p.x-ballX)*s>0){var d=Math.abs(p.x-ballX);if(d>cd){cd=d;c=p;}}});return c;}
   var Dg=OL_G+OL_T+r*3.2;
   var inside={x:Math.round(ballX+s*OL_G*0.5),y:LOS};
@@ -1116,9 +1126,9 @@ function addStunt(pi,stunt){
     var dt2=pickDT(),de2=pickDE();if(!dt2||!de2)return;saveH();
     push(dt2,'crash',inside,false,1);push(de2,'contain',contain,true,-1);
   }else{
-    var t3=defByLabel('3T')[0],t1=defByLabel('1T')[0];if(!t3||!t1)return;saveH();
-    push(t3,'cross',{x:Math.round(ballX+OL_G*0.5),y:LOS},true);
-    push(t1,'cross',{x:Math.round(ballX-OL_G*0.5),y:LOS},true);
+    var dts=interiorDTs();if(dts.length<2)return;saveH();var tL=dts[0],tR=dts[dts.length-1];
+    push(tR,'cross',{x:Math.round(ballX-OL_G*0.5),y:LOS},true);
+    push(tL,'cross',{x:Math.round(ballX+OL_G*0.5),y:LOS},true);
   }
   closeMenu();render();
 }
@@ -1258,7 +1268,7 @@ function applyFront(front,internal){
     var targets=FRONTS[front].map(function(t){return {x:techX(t.ref,t.off,t.w?-s:s),tag:t.tag,edge:t.ref==='E'};});
     targets.sort(function(a,b){return a.x-b.x;});
     dl.sort(function(a,b){return a.x-b.x;});
-    dl.forEach(function(p,i){var t=targets[i];p.x=t.x;p.y=t.edge?EDY:DLY;p.dl=t.tag;});
+    dl.forEach(function(p,i){var t=targets[i];p.x=t.x;p.y=t.edge?EDY:DLY;if(p.dt){updateDTLabel(p);}else{p.dl=t.tag;}});
   }
   // box backers stack the guards unless a coverage later pulls them to a drop
   var mike=defByLabel('MIKE')[0],will=defByLabel('WILL')[0],lby=LOS-Math.round(4.5*YD_V);
@@ -1324,7 +1334,7 @@ function teGame(side,deFirst){
   var r=R(),Dg=OL_G+OL_T+r*3.2,dt=null,dtd=1e9,de=null,ded=-1;
   players.forEach(function(p){
     if(p.color!==D)return;
-    if((p.label==='3T'||p.label==='1T')&&(p.x-ballX)*side>=0){var d=Math.abs(p.x-ballX);if(d<dtd){dtd=d;dt=p;}}
+    if(p.dt&&(p.x-ballX)*side>=0){var d=Math.abs(p.x-ballX);if(d<dtd){dtd=d;dt=p;}}
     if(p.label==='DE'&&(p.x-ballX)*side>0){var e=Math.abs(p.x-ballX);if(e>ded){ded=e;de=p;}}
   });
   if(!dt||!de)return false;
@@ -1336,20 +1346,9 @@ function teGame(side,deFirst){
   return true;
 }
 function twistDTs(){
-  var t3=defByLabel('3T')[0],t1=defByLabel('1T')[0];if(!t3||!t1)return false;
-  gamePush(t3,'cross',{x:ballX+OL_G*0.7,y:LOS+Math.round(0.9*YD_V)},false);
-  gamePush(t1,'cross',{x:ballX-OL_G*0.7,y:LOS+Math.round(0.9*YD_V)},false);
-  return true;
-}
-// Pirate: both DEs crash inside B-gap simultaneously — pure inside DE slant, no looper
-function pirateStunt(){
-  var r=R();
-  var des=players.filter(function(p){return p.color===D&&p.label==='DE';});
-  if(!des.length)return false;
-  des.forEach(function(de){
-    var side=(de.x>ballX)?1:-1;
-    gamePush(de,'crash',{x:de.x-side*Math.round(2*YD),y:LOS+Math.round(0.7*YD_V)},true,1);
-  });
+  var dts=interiorDTs();if(dts.length<2)return false;var tL=dts[0],tR=dts[dts.length-1];
+  gamePush(tR,'cross',{x:ballX-OL_G*0.7,y:LOS+Math.round(0.9*YD_V)},false);
+  gamePush(tL,'cross',{x:ballX+OL_G*0.7,y:LOS+Math.round(0.9*YD_V)},false);
   return true;
 }
 var TEAMSTUNT={
@@ -1357,8 +1356,7 @@ var TEAMSTUNT={
   tex_weak:function(s){return teGame(-s,true);},
   et_strong:function(s){return teGame(s,false);},
   et_weak:function(s){return teGame(-s,false);},
-  twist:function(){return twistDTs();},
-  pirate:function(){return pirateStunt();}
+  twist:function(){return twistDTs();}
 };
 function applyTeamStunt(name){
   if(!name||!TEAMSTUNT[name])return;
