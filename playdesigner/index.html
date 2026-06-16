@@ -1041,8 +1041,10 @@ function interiorDTs(){return players.filter(function(p){return p.color===D&&p.d
 var HIDE_BOX={'CB':1,'FS':1,'SS':1,'NICK':1,'X':1,'Z':1,'H':1,'Y':1,'WR':1};
 // a defender is "on a blitz" if they carry a blitz/rush assignment
 function isBlitzing(p){return assigns.some(function(a){return a.pid===p.id&&(/blitz/i.test(a.role||'')||a.kind==='rush');});}
-// box view keeps the box (non-perimeter) plus any perimeter defender sent on a blitz
-function isBoxPlayer(p){if(!HIDE_BOX[p.label])return true;return p.color===D&&isBlitzing(p);}
+// a defender has a hand-drawn path if a player-tied freehand route is anchored to them
+function hasDrawnPath(p){return routes.some(function(r){return r.tied&&r.pid===p.id;});}
+// box view keeps the box (non-perimeter) plus any perimeter defender sent on a blitz or given a drawn path
+function isBoxPlayer(p){if(!HIDE_BOX[p.label])return true;return p.color===D&&(isBlitzing(p)||hasDrawnPath(p));}
 function isDeepRole(r){return /^Deep/.test(r||'');}
 function isDeepDefender(p){return !!p&&(p.label==='CB'||p.label==='FS'||p.label==='SS');}
 function normalizeAssigns(){assigns.forEach(function(a){if(a.kind==='runfit')a.kind='run';else if(a.kind==='passrush')a.kind='rush';else if(a.kind==='coverage')a.kind='cover';if(!a.phase)a.phase=(a.kind==='run')?'run':'pass';});}
