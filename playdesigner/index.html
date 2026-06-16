@@ -204,6 +204,7 @@ var ballX=0,play='pass',defView=false,boxView=false,curCov='',curForm='',flip=fa
 var players=[],routes=[],hist=[],assigns=[],zones=[];
 var uid=0;function nextId(){return ++uid;}
 var tool='assign',drawing=false,curPts=[],dragIdx=-1,dragOff={x:0,y:0},arcStart=null,dragAssign=-1,dragMode='move',zoneDrag=null,stemDrag=-1,lastClient={x:0,y:0},lastTap=0,routeAnchorId=null;
+var _ready=false,_saveT=null;
 
 function saveH(){hist.push({p:JSON.stringify(players),r:JSON.stringify(routes),a:JSON.stringify(assigns),z:JSON.stringify(zones)});if(hist.length>50)hist.shift();}
 
@@ -372,6 +373,7 @@ function render(){
   });
   if(!boxView)drawBall();
   ctx.restore();
+  if(_ready)scheduleSave();
 }
 
 function mk(x,y,lb,sh,col,lk,dl,dt){return{id:nextId(),x:x,y:y,label:lb,shape:sh||'circle',color:col,locked:!!lk,dl:dl||null,dt:!!dt};}
@@ -951,6 +953,39 @@ notesEl.addEventListener('input',function(){try{localStorage.setItem(NKEY,notesE
 var TKEY='cpd_title',titleEl=document.getElementById('play-title');
 titleEl.value=localStorage.getItem(TKEY)||'';
 titleEl.addEventListener('input',function(){try{localStorage.setItem(TKEY,titleEl.value);}catch(e){}});
+
+/* ---- Autosave the live working diagram so it reloads on next open ---- */
+var SKEY='cpd_session';
+function saveSession(){
+  try{
+    localStorage.setItem(SKEY,JSON.stringify({
+      ballX:ballX,play:play,defView:defView,flip:flip,
+      curForm:curForm,curFront:curFront,curPress:curPress,curCov:curCov,
+      players:players,routes:routes,assigns:assigns,zones:zones
+    }));
+  }catch(e){}
+}
+function scheduleSave(){if(_saveT)clearTimeout(_saveT);_saveT=setTimeout(saveSession,400);}
+function restoreSession(){
+  var raw;try{raw=JSON.parse(localStorage.getItem(SKEY));}catch(e){raw=null;}
+  if(!raw||!Array.isArray(raw.players)||!raw.players.length)return false;
+  if(typeof raw.ballX==='number')ballX=raw.ballX;
+  players=raw.players;routes=raw.routes||[];assigns=raw.assigns||[];zones=raw.zones||[];
+  play=raw.play||'pass';defView=!!raw.defView;flip=!!raw.flip;
+  curForm=raw.curForm||'';curFront=raw.curFront||'';curPress=raw.curPress||'';curCov=raw.curCov||'';
+  // back-compat: promote old 1T/3T labels to dynamic interior-DT naming
+  players.forEach(function(pl){if(!pl.dt&&(pl.label==='1T'||pl.label==='3T')){pl.dt=true;updateDTLabel(pl);}});
+  ensureIds();normalizeAssigns();
+  // reflect restored state in the toolbar controls
+  document.getElementById('sel-form').value=curForm;
+  document.getElementById('sel-play').value=play;
+  document.getElementById('btn-defview').classList.toggle('act',defView);
+  var fb=document.getElementById('btn-flip');if(fb)fb.classList.toggle('act',flip);
+  return true;
+}
+// on first load, restore the previous working diagram if one exists (otherwise keep the default formation)
+if(restoreSession())render();
+_ready=true;
 
 function exportPNG(){
   var notes=notesEl.value.replace(/\s+$/,'');
