@@ -47,6 +47,17 @@ h1{font-size:12px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase;
 #call-strip{padding:6px 12px;background:var(--panel-2);border-bottom:1px solid var(--line);font-size:11.5px;font-weight:600;letter-spacing:.6px;color:var(--ink-3);text-align:center;text-transform:uppercase;min-height:26px}
 
 canvas{display:block;width:100%;touch-action:none;cursor:crosshair;background:#2f5a26}
+#ctrls{display:flex;gap:7px;align-items:center;padding:8px 10px;background:var(--panel);border-top:1px solid var(--line);flex-wrap:wrap}
+#ctrls button,#ctrls select{font-size:12px;padding:6px 10px;border-radius:5px;border:1px solid var(--line-2);background:var(--panel);color:var(--ink-2);cursor:pointer;min-height:32px;font-weight:500}
+#ctrls button:hover,#ctrls select:hover{background:var(--panel-2)}
+#ctrls button.act{background:var(--accent);color:#fff;border-color:var(--accent)}
+#ctrls label{font-size:11px;font-weight:600;letter-spacing:.4px;color:var(--ink-3)}
+#ctrls .sep{width:1px;height:22px;background:var(--line);margin:0 3px}
+#anim{flex:1;min-width:120px;accent-color:var(--accent);height:28px}
+#assign-card{display:none;padding:11px 14px;background:var(--accent-soft);border-top:1px solid var(--line);font-size:13px;line-height:1.6;color:var(--ink)}
+#assign-card b{display:block;font-size:15px;letter-spacing:.5px;margin-bottom:4px;color:var(--accent-hi)}
+#assign-card button{margin-left:8px;font-size:12px;padding:5px 11px;border-radius:5px;border:1px solid var(--accent);background:var(--accent);color:#fff;cursor:pointer}
+@media (pointer:coarse){#ctrls button,#ctrls select{min-height:42px;font-size:13px}}
 #leg{display:flex;gap:12px;padding:7px 11px;font-size:10.5px;color:var(--ink-3);background:var(--panel-2);flex-wrap:wrap;border-top:1px solid var(--line);align-items:center}
 .li{display:flex;align-items:center;gap:4px}
 
@@ -258,6 +269,17 @@ canvas{display:block;width:100%;touch-action:none;cursor:crosshair;background:#2
   <input id="play-title" placeholder="Untitled Play" autocomplete="off" spellcheck="false">
   <div id="call-strip" aria-live="polite"></div>
   <canvas id="c" role="img" aria-label="Play diagram. Drag players to align them; double-click a player to assign a route, run fit, rush or coverage."></canvas>
+  <div id="ctrls">
+    <button id="btn-play" title="Run the snap">&#9654; Snap</button>
+    <button id="btn-reset" title="Back to the pre-snap picture">Reset</button>
+    <input id="anim" type="range" min="0" max="100" value="0" step="1" aria-label="Play timeline">
+    <select id="sel-speed" aria-label="Tempo"><option value="0.5">0.5&times;</option><option value="1" selected>1&times;</option><option value="2">2&times;</option></select>
+    <div class="sep"></div>
+    <label for="sel-player">View</label>
+    <select id="sel-player"><option value="">All 22</option></select>
+    <button id="btn-quiz" title="Hide the assignment and quiz yourself">Quiz</button>
+  </div>
+  <div id="assign-card" aria-live="polite"></div>
   <div id="leg">
     <div class="li"><svg width="13" height="13"><rect x="1" y="1" width="11" height="11" fill="#185FA5" rx="1"/></svg> C locked</div>
     <div class="li"><svg width="13" height="13"><circle cx="6" cy="6" r="5" fill="#185FA5"/></svg> OL locked</div>
@@ -379,31 +401,31 @@ function drawBall(){
 function R(){return Math.max(8,Math.round(W/70));}
 function fillTextU(s,x,y){if(defView){ctx.save();ctx.translate(x,y);ctx.scale(1,-1);ctx.fillText(s,0,0);ctx.restore();}else ctx.fillText(s,x,y);}
 
-function nearestDist(pl){if(pl.locked)return 1e9;var m=1e9;players.forEach(function(o){if(o!==pl&&!o.locked&&o.color===pl.color){var d=Math.hypot(o.x-pl.x,o.y-pl.y);if(d<m)m=d;}});return m;}
+function nearestDist(pl){if(pl.locked)return 1e9;var m=1e9;players.forEach(function(o){if(o!==pl&&!o.locked&&o.color===pl.color){var d=Math.hypot(px(o)-px(pl),py(o)-py(pl));if(d<m)m=d;}});return m;}
 function drawPlayer(pl){
-  var R0=R(),r=R0,nd=nearestDist(pl);
+  var R0=R(),r=R0,nd=nearestDist(pl),PX=px(pl),PY=py(pl);
   if(nd<2*R0+2)r=Math.max(Math.round(R0*0.62),Math.floor(nd/2-1));
   ctx.save();
   ctx.shadowColor='rgba(0,0,0,0.45)';ctx.shadowBlur=Math.max(2,Math.round(R0*0.22));ctx.shadowOffsetY=(defView?-1:1)*Math.max(1,Math.round(R0*0.14));
   ctx.fillStyle=pl.color;
-  if(pl.shape==='sq'){ctx.fillRect(pl.x-r,pl.y-r,r*2,r*2);}
-  else{ctx.beginPath();ctx.arc(pl.x,pl.y,r,0,Math.PI*2);ctx.fill();}
+  if(pl.shape==='sq'){ctx.fillRect(PX-r,PY-r,r*2,r*2);}
+  else{ctx.beginPath();ctx.arc(PX,PY,r,0,Math.PI*2);ctx.fill();}
   ctx.shadowColor='transparent';ctx.shadowBlur=0;ctx.shadowOffsetY=0;
   ctx.strokeStyle=pl.locked?'rgba(255,255,255,0.35)':'rgba(255,255,255,0.9)';ctx.lineWidth=pl.locked?1:1.5;
-  if(pl.shape==='sq'){ctx.strokeRect(pl.x-r,pl.y-r,r*2,r*2);}
-  else{ctx.beginPath();ctx.arc(pl.x,pl.y,r,0,Math.PI*2);ctx.stroke();}
+  if(pl.shape==='sq'){ctx.strokeRect(PX-r,PY-r,r*2,r*2);}
+  else{ctx.beginPath();ctx.arc(PX,PY,r,0,Math.PI*2);ctx.stroke();}
   ctx.fillStyle='#fff';
   var fsz=Math.max(7,Math.round(r*0.92));ctx.font='bold '+fsz+'px sans-serif';
   ctx.textAlign='center';ctx.textBaseline='middle';
   var maxW=r*1.7,tw=ctx.measureText(pl.label).width;
   if(tw>maxW){fsz=Math.max(6,Math.floor(fsz*maxW/tw));ctx.font='bold '+fsz+'px sans-serif';}
-  fillTextU(pl.label,pl.x,pl.y);
+  fillTextU(pl.label,PX,PY);
   if(pl.dl){
     ctx.fillStyle='rgba(255,215,80,0.85)';
     ctx.font=Math.max(7,Math.round(R0*0.62))+'px sans-serif';
     ctx.textBaseline='middle';
     var off=r+Math.round(R0*0.62);
-    fillTextU(pl.dl,pl.x,defView?(pl.y-off):(pl.y+off));
+    fillTextU(pl.dl,PX,defView?(PY-off):(PY+off));
   }
   ctx.restore();
 }
@@ -443,7 +465,9 @@ function render(){
   drawField();
   zones.forEach(drawZone);
   routes.forEach(function(r){
+    if(quizOn&&focusId&&r.pid===focusId){return;}
     ctx.save();ctx.lineCap='round';ctx.lineJoin='round';
+    if(r.pid!=null)ctx.globalAlpha=dimFor(r.pid);
     if(r.type==='route'){
       var lp=routePts(r);if(!lp||lp.length<2){ctx.restore();return;}
       ctx.strokeStyle=caseColor(r.col);ctx.lineWidth=6;ctx.beginPath();lp.forEach(function(p,i){i===0?ctx.moveTo(p.x,p.y):ctx.lineTo(p.x,p.y);});ctx.stroke();
@@ -462,16 +486,21 @@ function render(){
   }
   var visPlayers=boxView?players.filter(isBoxPlayer):players;
   var visIds=boxView?visPlayers.reduce(function(m,p){m[p.id]=1;return m;},{}):null;
-  visPlayers.forEach(drawPlayer);
+  visPlayers.forEach(function(p){
+    var al=dimPlayer(p.id);
+    if(al<1){ctx.save();ctx.globalAlpha=al;drawPlayer(p);ctx.restore();}else drawPlayer(p);
+  });
   assigns.forEach(function(a){
     if(play==='run'&&a.phase==='pass')return;
     if(play==='pass'&&a.phase==='run')return;
     if(visIds&&!visIds[a.pid])return;
-    drawAssign(a);
+    if(quizOn&&focusId&&a.pid===focusId)return;      // quiz hides the answer
+    var al=dimFor(a.pid);
+    if(al<1){ctx.save();ctx.globalAlpha=al;drawAssign(a);ctx.restore();}else drawAssign(a);
   });
   if(!boxView)drawBall();
   ctx.restore();
-  callStrip();
+  callStrip();fillPlayerSelect();renderCard();
   if(_ready)scheduleSave();
 }
 
@@ -1649,6 +1678,12 @@ document.getElementById('sel-play').addEventListener('change',function(){play=th
 document.getElementById('sel-run').addEventListener('change',function(){applyRunPlay(this.value);this.value='';});
 document.getElementById('sel-defpers').addEventListener('change',function(){applyDefPers(this.value);});
 document.getElementById('sel-pass').addEventListener('change',function(){applyPassPlay(this.value);this.value='';});
+document.getElementById('btn-play').addEventListener('click',function(){animPlaying?stopAnim():startAnim();});
+document.getElementById('btn-reset').addEventListener('click',resetAnim);
+document.getElementById('anim').addEventListener('input',function(){stopAnim();setAnim(this.value/100);});
+document.getElementById('sel-speed').addEventListener('change',function(){animSpeed=parseFloat(this.value);});
+document.getElementById('sel-player').addEventListener('change',function(){focusId=this.value?parseInt(this.value,10):null;render();});
+document.getElementById('btn-quiz').addEventListener('click',function(){quizOn=!quizOn;this.classList.toggle('act',quizOn);render();});
 document.getElementById('btn-rundir').addEventListener('click',function(){
   runDir=-runDir;this.innerHTML='Run '+(runDir>0?'&rarr;':'&larr;');
   if(curRun)applyRunPlay(curRun);
@@ -2397,6 +2432,182 @@ function applyPassPlay(key){
   slideProtect(d);
   curPass=key;render();
 }
+
+
+/* ================= ANIMATION =================
+   Every player's travel path is derived from whatever he was already assigned,
+   so the snap plays back the diagram rather than a separate set of data. */
+var animT=null,animPlaying=false,animSpeed=1,_animPos=null,_animLast=0;
+function posAt(pts,t){
+  if(!pts||!pts.length)return null;
+  if(pts.length===1)return{x:pts[0].x,y:pts[0].y};
+  t=Math.max(0,Math.min(1,t));
+  var segs=[],total=0,i;
+  for(i=0;i<pts.length-1;i++){var d=Math.hypot(pts[i+1].x-pts[i].x,pts[i+1].y-pts[i].y);segs.push(d);total+=d;}
+  if(total<=0)return{x:pts[0].x,y:pts[0].y};
+  var want=t*total,acc=0;
+  for(i=0;i<segs.length;i++){
+    if(acc+segs[i]>=want){var u=segs[i]?(want-acc)/segs[i]:0;return{x:pts[i].x+(pts[i+1].x-pts[i].x)*u,y:pts[i].y+(pts[i+1].y-pts[i].y)*u};}
+    acc+=segs[i];
+  }
+  var n=pts.length-1;return{x:pts[n].x,y:pts[n].y};
+}
+function playerPath(p){
+  if(!p)return null;
+  var i,r;
+  for(i=0;i<routes.length;i++){
+    r=routes[i];
+    if(r.type==='tree'&&r.pid===p.id&&play!=='run')return routePoints(p,r.concept,r.stem);
+    if(r.type==='route'&&r.tied&&r.pid===p.id)return routePts(r);
+  }
+  var best=null;
+  for(i=0;i<assigns.length;i++){
+    var a=assigns[i];
+    if(a.pid!==p.id)continue;
+    if(play==='run'&&a.phase==='pass')continue;
+    if(play==='pass'&&a.phase==='run')continue;
+    if(a.kind==='progression'||a.kind==='hot'||a.kind==='read')continue;
+    if(a.path&&a.path.length>1)return a.path;
+    if(a.kind==='cover'&&a.targetPid!=null)continue;      // handled as man trail
+    if(a.tx!=null&&a.ty!=null)best={x:a.tx,y:a.ty};
+  }
+  if(best)return[{x:p.x,y:p.y},best];
+  return null;
+}
+function animPositions(t){
+  var pos={},base={};
+  players.forEach(function(p){pos[p.id]={x:p.x,y:p.y};base[p.id]={x:p.x,y:p.y};});
+  players.forEach(function(p){
+    var pts=playerPath(p);
+    if(pts&&pts.length>1){var q=posAt(pts,t);if(q)pos[p.id]=q;}
+  });
+  // man defenders trail their receiver, holding their original leverage
+  assigns.forEach(function(a){
+    if(a.kind!=='cover'||a.targetPid==null)return;
+    var d=playerById(a.pid),rcv=playerById(a.targetPid);
+    if(!d||!rcv)return;
+    var rp=posAt(playerPath(rcv)||[base[rcv.id]],Math.max(0,t-0.12))||base[rcv.id];
+    pos[d.id]={x:rp.x+(base[d.id].x-base[rcv.id].x)*0.55,y:rp.y+(base[d.id].y-base[rcv.id].y)*0.75};
+  });
+  return pos;
+}
+function setAnim(t){
+  animT=t;
+  _animPos=(t==null)?null:animPositions(t);
+  var sl=document.getElementById('anim');
+  if(sl&&t!=null)sl.value=Math.round(t*100);
+  render();
+}
+function animStep(ts){
+  if(!animPlaying)return;
+  if(!_animLast)_animLast=ts;
+  var dt=(ts-_animLast)/1000;_animLast=ts;
+  var t=(animT==null?0:animT)+dt*animSpeed/2.6;   // a snap runs about 2.6 seconds
+  if(t>=1){setAnim(1);stopAnim();return;}
+  setAnim(t);
+  requestAnimationFrame(animStep);
+}
+function startAnim(){
+  if(animT==null||animT>=1)animT=0;
+  animPlaying=true;_animLast=0;
+  document.getElementById('btn-play').textContent='❚❚ Pause';
+  requestAnimationFrame(animStep);
+}
+function stopAnim(){
+  animPlaying=false;_animLast=0;
+  document.getElementById('btn-play').textContent='▶ Snap';
+}
+function resetAnim(){stopAnim();setAnim(null);}
+function px(p){return _animPos&&_animPos[p.id]?_animPos[p.id].x:p.x;}
+function py(p){return _animPos&&_animPos[p.id]?_animPos[p.id].y:p.y;}
+
+/* ================= PLAYER VIEW ================= */
+var focusId=null,quizOn=false;
+function fillPlayerSelect(){
+  var sel=document.getElementById('sel-player');if(!sel)return;
+  var keep=sel.value;
+  sel.innerHTML='';
+  var o=document.createElement('option');o.value='';o.textContent='All 22';sel.appendChild(o);
+  [['Offense',function(p){return p.color!==D;}],['Defense',function(p){return p.color===D;}]].forEach(function(g){
+    var grp=document.createElement('optgroup');grp.label=g[0];
+    players.filter(g[1]).forEach(function(p){
+      var op=document.createElement('option');op.value=String(p.id);op.textContent=p.label;grp.appendChild(op);
+    });
+    sel.appendChild(grp);
+  });
+  sel.value=keep;
+  if(sel.value!==keep)focusId=null;
+}
+function yds(px2){return Math.round(px2/YD*10)/10;}
+function alignDesc(p){
+  var side=p.x<ballX?'left':(p.x>ballX?'right':'over the ball');
+  var wide=Math.abs(yds(p.x-ballX));
+  var depth=Math.round(Math.abs(p.y-LOS)/YD_V*10)/10;
+  var rel=p.y>LOS+2?(depth+' yds deep'):(p.y<LOS-2?depth+' yds off the ball':'on the ball');
+  if(p.dt)return p.label+' technique · '+rel;
+  if(Math.abs(p.x-ballX)<OL_G*0.4)return 'over the ball · '+rel;
+  return wide+' yds '+side+' of the ball · '+rel;
+}
+function assignmentText(p){
+  if(!p)return'';
+  var lines=['ALIGN — '+alignDesc(p)];
+  var r=null;
+  routes.forEach(function(q){if(q.type==='tree'&&q.pid===p.id)r=q;});
+  if(r&&play!=='run')lines.push('ROUTE — '+r.concept+' at '+Math.round(r.stem/YD_V)+' yds');
+  var mine=assigns.filter(function(a){
+    if(a.pid!==p.id)return false;
+    if(play==='run'&&a.phase==='pass')return false;
+    if(play==='pass'&&a.phase==='run')return false;
+    return true;
+  });
+  mine.forEach(function(a){
+    if(a.kind==='progression'){lines.push('READ — you are number '+a.role+' in the progression');return;}
+    if(a.kind==='hot'){lines.push('HOT — sight adjust if they bring pressure');return;}
+    if(a.kind==='read'){lines.push('READ KEY — the quarterback is reading you; you are unblocked');return;}
+    if(a.kind==='motion'){lines.push('MOTION — '+a.role);return;}
+    if(a.kind==='block'){
+      var t=a.targetPid!=null?playerById(a.targetPid):null;
+      lines.push('BLOCK — '+a.role+(t?' on the '+t.label:''));return;
+    }
+    if(a.kind==='carry'){lines.push('BALL — '+a.role);return;}
+    if(a.kind==='cover'){
+      var t2=a.targetPid!=null?playerById(a.targetPid):null;
+      lines.push('COVER — '+a.role+(t2?' ('+t2.label+')':''));return;
+    }
+    if(a.kind==='rush'){lines.push('RUSH — '+a.role);return;}
+    if(a.kind==='run'){lines.push('FIT — '+a.role);return;}
+    lines.push(a.role);
+  });
+  if(p.color===D){
+    if(isDL(p))lines.push('KEY — the near lineman; get off on the ball');
+    else if(/MIKE|WILL|SAM|JACK|RUSH/.test(p.label))lines.push('KEY — backfield flow and the guard in front of you');
+    else lines.push('KEY — the number '+(/CB/.test(p.label)?'1':'2')+' receiver to your side');
+  }
+  if(lines.length===1)lines.push('No assignment yet — double-click to give this player a job.');
+  return lines.join('\n');
+}
+function renderCard(){
+  var el=document.getElementById('assign-card');if(!el)return;
+  var p=focusId?playerById(focusId):null;
+  if(!p){el.style.display='none';el.textContent='';return;}
+  el.style.display='block';
+  if(quizOn){el.innerHTML='<b>'+p.label+'</b> — what is your job? <button id="btn-reveal">Reveal</button>';
+    var rb=document.getElementById('btn-reveal');
+    if(rb)rb.addEventListener('click',function(){quizOn=false;document.getElementById('btn-quiz').classList.remove('act');render();});
+    return;}
+  el.innerHTML='';
+  var h=document.createElement('b');h.textContent=p.label;el.appendChild(h);
+  assignmentText(p).split('\n').forEach(function(l){
+    var d=document.createElement('div');d.textContent=l;el.appendChild(d);
+  });
+}
+function dimFor(id){
+  var a=1;
+  if(animT!=null)a=0.20;                       // art recedes while the snap runs
+  if(focusId&&id!==focusId)a=Math.min(a,0.16);  // player view mutes everyone else
+  return a;
+}
+function dimPlayer(id){return (focusId&&id!==focusId)?0.16:1;}
 
 function applyRunPlay(key){
   if(!key||!RUNPLAY[key])return;

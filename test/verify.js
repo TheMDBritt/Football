@@ -224,5 +224,47 @@ w.applyPassPlay("smash");
 chk("a pass call clears the run picture",
     w.assigns.filter(function(a){return a.kind==="carry";}).length===0);
 
+
+/* ---- animation and player view ---- */
+w.players=[]; w.loadForm("gun_2x2"); w.applyFront("over"); w.applyCoverage("1");
+w.applyPassPlay("four_verts");
+var xw=w.players.find(function(p){return p.label==="X";});
+var xs={x:xw.x,y:xw.y};
+w.setAnim(0);
+chk("at the snap everyone is at their alignment",
+    Math.abs(w.px(xw)-xs.x)<1 && Math.abs(w.py(xw)-xs.y)<1);
+w.setAnim(1);
+chk("the receiver travels downfield", xs.y-w.py(xw) > 5*w.YD_V,
+    Math.round((xs.y-w.py(xw))/w.YD_V)+" yds");
+var cbw=w.players.filter(function(p){return p.label==="CB";})
+  .sort(function(a,b){return Math.abs(a.x-xw.x)-Math.abs(b.x-xw.x);})[0];
+var cy=cbw.y; w.setAnim(1);
+chk("the man corner runs with his receiver", Math.abs(w.py(cbw)-cy) > 3*w.YD_V);
+w.resetAnim();
+chk("reset restores the still picture", w.animT===null && Math.abs(w.px(xw)-xs.x)<1);
+
+w.applyRunPlay("power");
+var rbw=w.players.find(function(p){return p.label==="RB";});
+var ry=rbw.y; w.setAnim(1);
+chk("the ball carrier runs his track", ry-w.py(rbw) > 3*w.YD_V);
+var lgw=w.players.find(function(p){return p.label==="LG";});
+chk("the puller travels his path", Math.abs(w.px(lgw)-lgw.x) > w.YD);
+w.resetAnim();
+
+w.applyPassPlay("smash");
+w.focusId=w.players.find(function(p){return p.label==="Y";}).id; w.render();
+var card=w.document.getElementById("assign-card").textContent;
+chk("assignment card states alignment, route and read",
+    /ALIGN/.test(card) && /ROUTE/.test(card) && /READ/.test(card), card.slice(0,50));
+w.focusId=w.players.find(function(p){return p.label==="MIKE";}).id; w.render();
+var dcard=w.document.getElementById("assign-card").textContent;
+chk("defender card gives a coverage and a key",
+    /KEY/.test(dcard) && /COVER|FIT|RUSH/.test(dcard));
+w.quizOn=true; w.render();
+chk("quiz hides the answer", /Reveal/.test(w.document.getElementById("assign-card").textContent));
+w.quizOn=false; w.focusId=null; w.render();
+chk("the view picker lists all 22",
+    w.document.getElementById("sel-player").querySelectorAll("option").length===23);
+
 console.log("\n" + (fails ? fails + " FAILURE(S)" : "ALL " + "CHECKS PASSED"));
 process.exit(fails ? 1 : 0);
