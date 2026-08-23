@@ -179,6 +179,12 @@ canvas{display:block;width:100%;touch-action:none;cursor:crosshair;background:#2
       <optgroup label="Perimeter"><option value="toss">Toss</option></optgroup>
       <optgroup label="QB run"><option value="zone_read">Zone Read</option><option value="power_read">Power Read</option><option value="qb_counter">QB Counter</option></optgroup>
     </select>
+    <select id="sel-pass" title="One-click pass concept">
+      <option value="">-- pass concept --</option>
+      <optgroup label="Quick"><option value="slant_flat">Slant / Flat</option><option value="stick">Stick</option><option value="snag">Snag</option></optgroup>
+      <optgroup label="Horizontal"><option value="mesh">Mesh</option><option value="drive">Drive</option><option value="curl_flat">Curl / Flat</option></optgroup>
+      <optgroup label="Vertical"><option value="four_verts">Four Verts</option><option value="smash">Smash</option><option value="flood">Flood</option><option value="y_cross">Y-Cross</option></optgroup>
+    </select>
     <button id="btn-rundir" title="Flip the run direction">Run &rarr;</button>
     <div class="sep"></div>
     <button id="btn-defview">Def View</button>
@@ -1065,7 +1071,7 @@ function submitForm(mode,orig,name,pb,tagsStr){
     ballX:ballX,hash:document.getElementById('sel-hash').value,
     players:players,routes:routes,assigns:assigns,zones:zones,notes:notesEl.value,
     defView:defView,boxView:boxView,flip:flip,play:play,
-    form:curForm,front:curFront,press:curPress,cov:curCov,run:curRun,runDir:runDir,
+    form:curForm,front:curFront,press:curPress,cov:curCov,run:curRun,runDir:runDir,pass:curPass,defPers:curDefPers,
     playbook:pb,tags:tags};
   if(idx>=0)plays[idx]=rec;else plays.push(rec);
   setPlays(plays);openModal();
@@ -1084,7 +1090,7 @@ function loadPlay(p){
   defView=!!p.defView;document.getElementById('btn-defview').classList.toggle('act',defView);
   flip=!!p.flip;var fb=document.getElementById('btn-flip');if(fb)fb.classList.toggle('act',flip);
   curFront=p.front||'';curPress=p.press||'';curForm=p.form||'';curCov=p.cov||'';
-  curRun=p.run||'';runDir=p.runDir||1;
+  curRun=p.run||'';runDir=p.runDir||1;curPass=p.pass||'';curDefPers=p.defPers||'nickel';
   play=p.play||'pass';boxView=!!p.boxView;
   // put the toolbar back in the state this play was saved in
   var setSel=function(id,v){var el=document.getElementById(id);if(el)el.value=v||'';};
@@ -1180,7 +1186,7 @@ function saveSession(){
   try{
     localStorage.setItem(SKEY,JSON.stringify({
       ballX:ballX,play:play,defView:defView,flip:flip,
-      curForm:curForm,curFront:curFront,curPress:curPress,curCov:curCov,curRun:curRun,runDir:runDir,
+      curForm:curForm,curFront:curFront,curPress:curPress,curCov:curCov,curRun:curRun,runDir:runDir,curPass:curPass,curDefPers:curDefPers,
       players:players,routes:routes,assigns:assigns,zones:zones
     }));
   }catch(e){}
@@ -1193,7 +1199,7 @@ function restoreSession(){
   players=raw.players;routes=raw.routes||[];assigns=raw.assigns||[];zones=raw.zones||[];
   play=raw.play||'pass';defView=!!raw.defView;flip=!!raw.flip;
   curForm=raw.curForm||'';curFront=raw.curFront||'';curPress=raw.curPress||'';curCov=raw.curCov||'';
-  curRun=raw.curRun||'';runDir=raw.runDir||1;
+  curRun=raw.curRun||'';runDir=raw.runDir||1;curPass=raw.curPass||'';curDefPers=raw.curDefPers||'nickel';
   // back-compat: promote old 1T/3T labels to dynamic interior-DT naming
   players.forEach(function(pl){if(!pl.dt&&(pl.label==='1T'||pl.label==='3T')){pl.dt=true;updateDTLabel(pl);}});
   ensureIds();normalizeAssigns();
@@ -1253,11 +1259,13 @@ function exportPNG(){
 }
 
 /* ---- Run fit / Pass rush / Coverage ---- */
-var RFCOL='#e23b3b',PRCOL='#ff8c1a',CVCOL='#f5f5f5',BLKCOL='#9fd0ff',CARCOL='#ffc61a',RDCOL='#f06ae0';
+var RFCOL='#e23b3b',PRCOL='#ff8c1a',CVCOL='#f5f5f5',BLKCOL='#9fd0ff',CARCOL='#ffc61a',RDCOL='#f06ae0',PROGCOL='#ffe066',HOTCOL='#ff5f5f';
 function kindCol(k){
   if(k==='block')return BLKCOL;
   if(k==='carry')return CARCOL;
   if(k==='read')return RDCOL;
+  if(k==='progression')return PROGCOL;
+  if(k==='hot')return HOTCOL;
   if(k==='run'||k==='runfit')return RFCOL;
   if(k==='rush'||k==='passrush')return PRCOL;
   return CVCOL;
@@ -1417,6 +1425,22 @@ function drawRunArt(a,p,col){
   ctx.restore();
   if(a.kind==='carry')drawTag(pts[n2].x,pts[n2].y,a.role,col);
 }
+function drawBadge(a,p,col){
+  var r=Math.max(9,Math.round(R()*0.78));
+  // sit the badge on the far side from the ball; backs wear it underneath so it clears the quarterback
+  var sx=p.x<ballX?-1:1, deep=p.y>LOS+Math.round(2.5*YD_V);
+  var bx=p.x+sx*(R()+r*0.9), by=deep?(p.y+(defView?-1:1)*(R()+r*0.9)):(p.y-(defView?-1:1)*(R()+r*0.3));
+  ctx.save();
+  ctx.fillStyle=col;ctx.strokeStyle='rgba(0,0,0,0.65)';ctx.lineWidth=2;
+  if(a.kind==='hot'){
+    ctx.beginPath();ctx.moveTo(bx,by-r);ctx.lineTo(bx+r,by);ctx.lineTo(bx,by+r);ctx.lineTo(bx-r,by);ctx.closePath();
+  }else{ctx.beginPath();ctx.arc(bx,by,r,0,Math.PI*2);}
+  ctx.fill();ctx.stroke();
+  ctx.fillStyle='#141414';ctx.textAlign='center';ctx.textBaseline='middle';
+  ctx.font='bold '+Math.max(8,Math.round(r*(a.kind==='hot'?0.82:1.15)))+'px sans-serif';
+  fillTextU(a.kind==='hot'?'H':a.role,bx,by);
+  ctx.restore();
+}
 function drawMotion(a,p){
   var pts=a.path.map(function(o){return{x:o.x,y:o.y};}),n2=pts.length-1;
   var r0=R(),dx=pts[1].x-pts[0].x,dy=pts[1].y-pts[0].y,L=Math.hypot(dx,dy)||1;
@@ -1433,6 +1457,7 @@ function drawMotion(a,p){
 function drawAssign(a){
   var p=playerById(a.pid);if(!p)return;
   var col=kindCol(a.kind);
+  if(a.kind==='progression'||a.kind==='hot'){drawBadge(a,p,col);return;}
   if(a.kind==='motion'){drawMotion(a,p);return;}
   if(a.kind==='block'||a.kind==='carry'||a.kind==='read'){drawRunArt(a,p,col);return;}
   if(a.targetPid!=null){var rec=playerById(a.targetPid);if(rec){a.tx=rec.x;a.ty=rec.y;drawArrow(p.x,p.y,rec.x,rec.y,col);drawTag(rec.x,rec.y,a.role,col);}return;}
@@ -1623,6 +1648,7 @@ function syncToggles(){
 document.getElementById('sel-play').addEventListener('change',function(){play=this.value;closeMenu();render();});
 document.getElementById('sel-run').addEventListener('change',function(){applyRunPlay(this.value);this.value='';});
 document.getElementById('sel-defpers').addEventListener('change',function(){applyDefPers(this.value);});
+document.getElementById('sel-pass').addEventListener('change',function(){applyPassPlay(this.value);this.value='';});
 document.getElementById('btn-rundir').addEventListener('click',function(){
   runDir=-runDir;this.innerHTML='Run '+(runDir>0?'&rarr;':'&larr;');
   if(curRun)applyRunPlay(curRun);
@@ -2129,6 +2155,7 @@ function callStrip(){
   if(hs)bits.push(hs.options[hs.selectedIndex].text);
   if(curFront)bits.push(document.querySelector('#sel-front option[value="'+curFront+'"]').text);
   if(curCov)bits.push(document.querySelector('#sel-cov option[value="'+curCov+'"]').text);
+  if(curPass)bits.push(document.querySelector('#sel-pass option[value="'+curPass+'"]').text);
   if(curPress)bits.push(document.querySelector('#sel-press option[value="'+curPress+'"]').text);
   var el=document.getElementById('call-strip');
   if(el)el.textContent=bits.join('  ·  ');
@@ -2238,9 +2265,142 @@ function applyDefPers(key){
   alignDBsToWRs();refitDefense();render();
 }
 
+
+/* ================= PASS CONCEPTS =================
+   A concept assigns a route to each eligible by his position in the formation
+   (#1 = outside, #2 = next in, #3 = inside) on each side of the ball, then
+   numbers the quarterback's progression. */
+function eligibles(){
+  return players.filter(function(p){
+    return p.color===O && !isOL(p) && !/^(QB)$/.test(p.label);
+  });
+}
+// receivers ordered outside-in on one side: #1, #2, #3
+function sideStack(dir){
+  return eligibles().filter(function(p){
+    return (p.x-ballX)*dir>0 && p.y<=LOS+Math.round(3*YD_V);
+  }).sort(function(a,b){
+    return Math.abs(b.x-ballX)-Math.abs(a.x-ballX);
+  });
+}
+function backfield(){
+  return eligibles().filter(function(p){return p.y>LOS+Math.round(3*YD_V);})
+    .sort(function(a,b){return a.x-b.x;});
+}
+function setRoute(p,concept,stem){
+  if(!p)return;
+  routes=routes.filter(function(r){return !(r.type==='tree'&&r.pid===p.id);});
+  routes.push({type:'tree',pid:p.id,concept:concept,stem:stem==null?defStem(concept):Math.round(stem*YD_V),col:'#5af'});
+}
+function clearPass(){
+  routes=routes.filter(function(r){return r.type!=='tree';});
+  assigns=assigns.filter(function(a){return a.kind!=='progression'&&a.kind!=='hot'&&!(a.kind==='block'&&a.phase==='pass');});
+}
+function progression(list){
+  list.forEach(function(p,i){
+    if(!p)return;
+    assigns.push({pid:p.id,phase:'pass',kind:'progression',role:String(i+1),tx:p.x,ty:p.y});
+  });
+}
+function hotMark(p){
+  if(!p)return;
+  assigns.push({pid:p.id,phase:'pass',kind:'hot',role:'HOT',tx:p.x,ty:p.y});
+}
+// five-man slide protection with the back checking the backside edge
+function slideProtect(dir){
+  olSorted().forEach(function(p){
+    assigns.push({pid:p.id,phase:'pass',kind:'block',role:'Slide',tx:Math.round(p.x+dir*OL_G*0.35),ty:Math.round(LOS+0.9*YD_V)});
+  });
+  var bk=backfield()[0];
+  if(bk){
+    var e=emlos(-dir);
+    if(e)assigns.push({pid:bk.id,phase:'pass',kind:'block',role:'Check',targetPid:e.id,tx:e.x,ty:e.y});
+    else assigns.push({pid:bk.id,phase:'pass',kind:'block',role:'Check',tx:Math.round(bk.x-dir*OL_G),ty:Math.round(LOS+0.9*YD_V)});
+  }
+}
+var PASSPLAY={
+  mesh:function(d){
+    var S=sideStack(d),W2=sideStack(-d),bk=backfield()[0];
+    setRoute(S[0],'Corner',10); setRoute(S[1]||S[0],'Drag',2);
+    setRoute(W2[0],'Hitch',6);  setRoute(W2[1]||W2[0],'Drag',2);
+    if(bk)setRoute(bk,'Flat',1);
+    progression([S[1]||S[0],W2[1]||W2[0],bk,S[0]]); hotMark(bk);
+  },
+  flood:function(d){
+    var S=sideStack(d),bk=backfield()[0];
+    setRoute(S[0],'Go (Fly)',14); setRoute(S[1]||S[0],'Out',12);
+    setRoute(bk||S[2],'Flat',2);
+    var W2=sideStack(-d); setRoute(W2[0],'Comeback',13);
+    progression([S[0],S[1]||S[0],bk||S[2],W2[0]]); hotMark(bk);
+  },
+  smash:function(d){
+    var S=sideStack(d),W2=sideStack(-d),bk=backfield()[0];
+    setRoute(S[0],'Hitch',6); setRoute(S[1]||S[0],'Corner',10);
+    setRoute(W2[0],'Hitch',6); if(W2[1])setRoute(W2[1],'Seam',14);
+    progression([S[1]||S[0],S[0],W2[0]]); hotMark(bk);
+  },
+  stick:function(d){
+    var S=sideStack(d),W2=sideStack(-d),bk=backfield()[0];
+    setRoute(S[0],'Go (Fly)',14); setRoute(S[1]||S[0],'Out',5);
+    if(S[2])setRoute(S[2],'Flat',1); else if(bk)setRoute(bk,'Flat',1);
+    setRoute(W2[0],'Slant',3);
+    progression([S[1]||S[0],S[2]||bk,W2[0]]); hotMark(bk);
+  },
+  four_verts:function(d){
+    var S=sideStack(d),W2=sideStack(-d),bk=backfield()[0];
+    S.forEach(function(p,i){setRoute(p,i===0?'Go (Fly)':'Seam',14);});
+    W2.forEach(function(p,i){setRoute(p,i===0?'Go (Fly)':'Seam',14);});
+    if(bk)setRoute(bk,'Screen',0);
+    progression([S[1]||S[0],W2[1]||W2[0],S[0],W2[0]]); hotMark(bk);
+  },
+  curl_flat:function(d){
+    var S=sideStack(d),W2=sideStack(-d),bk=backfield()[0];
+    setRoute(S[0],'Curl',12); setRoute(S[1]||S[0],'Flat',2);
+    setRoute(W2[0],'Curl',12); if(W2[1])setRoute(W2[1],'Flat',2);
+    progression([S[0],S[1]||S[0],W2[0]]); hotMark(bk);
+  },
+  drive:function(d){
+    var S=sideStack(d),W2=sideStack(-d),bk=backfield()[0];
+    setRoute(S[0],'Post',10); setRoute(S[1]||S[0],'Drag',3);
+    setRoute(W2[0],'In (Dig)',12); if(W2[1])setRoute(W2[1],'Curl',10);
+    if(bk)setRoute(bk,'Flat',1);
+    progression([S[1]||S[0],W2[0],bk,S[0]]); hotMark(bk);
+  },
+  y_cross:function(d){
+    var S=sideStack(d),W2=sideStack(-d),bk=backfield()[0];
+    setRoute(S[0],'Go (Fly)',14); setRoute(S[1]||S[0],'Drag',8);
+    setRoute(W2[0],'Comeback',13); if(W2[1])setRoute(W2[1],'Post',12);
+    if(bk)setRoute(bk,'Flat',1);
+    progression([S[1]||S[0],W2[1]||W2[0],bk,W2[0]]); hotMark(bk);
+  },
+  snag:function(d){
+    var S=sideStack(d),W2=sideStack(-d),bk=backfield()[0];
+    setRoute(S[0],'Corner',10); setRoute(S[1]||S[0],'Slant',5);
+    if(S[2])setRoute(S[2],'Flat',1); else if(bk)setRoute(bk,'Flat',1);
+    setRoute(W2[0],'Comeback',12);
+    progression([S[1]||S[0],S[0],S[2]||bk]); hotMark(bk);
+  },
+  slant_flat:function(d){
+    var S=sideStack(d),W2=sideStack(-d),bk=backfield()[0];
+    setRoute(S[0],'Slant',3); setRoute(S[1]||S[0],'Flat',1);
+    setRoute(W2[0],'Slant',3); if(W2[1])setRoute(W2[1],'Flat',1);
+    progression([S[0],S[1]||S[0],W2[0]]); hotMark(bk);
+  }
+};
+var curPass='';
+function applyPassPlay(key){
+  if(!key||!PASSPLAY[key])return;
+  saveH();clearPass();clearRun();curRun='';
+  play='pass';document.getElementById('sel-play').value='pass';
+  var d=frontDir()||1;
+  PASSPLAY[key](d);
+  slideProtect(d);
+  curPass=key;render();
+}
+
 function applyRunPlay(key){
   if(!key||!RUNPLAY[key])return;
-  saveH();clearRun();
+  saveH();clearRun();clearPass();curPass='';
   play='run';document.getElementById('sel-play').value='run';
   RUNPLAY[key](runDir);
   curRun=key;render();

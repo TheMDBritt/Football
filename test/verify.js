@@ -197,5 +197,32 @@ w.runDir=1; w.applyRunPlay("counter_gt");
 chk("counter pulls two men",
     runRoles().filter(function(r){return /Pull/.test(r);}).length===2);
 
+
+/* ---- pass concepts, progressions, protection ---- */
+w.players=[]; w.loadForm("gun_2x2"); w.applyFront("over"); w.applyCoverage("3");
+Object.keys(w.PASSPLAY).forEach(function(k){
+  var t=null; try{ w.applyPassPlay(k); }catch(e){ t=e.message; }
+  var R2=w.routes.filter(function(r){return r.type==="tree";});
+  var prog=w.assigns.filter(function(a){return a.kind==="progression";});
+  var hot=w.assigns.filter(function(a){return a.kind==="hot";});
+  var prot=w.assigns.filter(function(a){return a.kind==="block"&&a.phase==="pass"&&w.isOL(w.playerById(a.pid));});
+  chk("concept "+k+" builds routes", t===null && R2.length>=3, t||R2.length);
+  chk("concept "+k+" numbers a progression", prog.length>=2);
+  chk("concept "+k+" marks one hot", hot.length===1);
+  chk("concept "+k+" protects with five linemen", prot.length===5, prot.length);
+});
+w.applyPassPlay("four_verts");
+chk("four verts sends four vertical",
+    w.routes.filter(function(r){return r.type==="tree"&&/Go|Seam/.test(r.concept);}).length>=4);
+w.applyPassPlay("mesh");
+chk("mesh has two crossers", w.routes.filter(function(r){return r.concept==="Drag";}).length===2);
+w.applyRunPlay("power");
+chk("a run call clears the pass picture",
+    w.routes.filter(function(r){return r.type==="tree";}).length===0 &&
+    w.assigns.filter(function(a){return a.kind==="progression";}).length===0);
+w.applyPassPlay("smash");
+chk("a pass call clears the run picture",
+    w.assigns.filter(function(a){return a.kind==="carry";}).length===0);
+
 console.log("\n" + (fails ? fails + " FAILURE(S)" : "ALL " + "CHECKS PASSED"));
 process.exit(fails ? 1 : 0);
