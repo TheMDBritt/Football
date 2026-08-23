@@ -9,5 +9,8 @@
     "canvas": "^3.2.3",
     "jsdom": "^30.0.1"
   },
-  "version": ""
+  "version": "",
+  "dependencies": {
+    "playwright-core": "^1.62.1"
+  }
 }

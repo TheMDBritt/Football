@@ -468,13 +468,24 @@ var cbn=w.players.filter(function(p){return p.label==="CB";})
 chk("cover 3 corner runs with a vertical number one",
     simDist(simPos(cbn,1),simPos(xr,1)) <= simDist(simPos(cbn,0),simPos(xr,0)) + 1.5);
 mp=w.matchPlan();
-var stuck=0,tot=0;
+// A match is zone with rules. A deep player stays on top of his man; an underneath
+// player holds his area and passes the route off rather than chasing it out.
+var onTopAll=true, inZoneAll=true;
 Object.keys(mp).forEach(function(id){
   var d=w.playerById(+id), r=mp[id].rec; if(!d||!r)return;
-  tot++;
-  if(simDist(simPos(d,1),simPos(r,1)) <= simDist(simPos(d,0.15),simPos(r,0.15)) + 2.5)stuck++;
+  var dp=simPos(d,1), rp=simPos(r,1);
+  if(mp[id].deep){ if((rp.y-dp.y)/w.YD_V < -0.5) onTopAll=false; }
+  else{
+    var za=w.assigns.filter(function(a){
+      return a.pid===d.id && a.kind==="cover" && a.shape==="circle";})[0];
+    if(za){
+      var nx=(dp.x-za.tx)/(za.rx||1), ny=(dp.y-za.ty)/(za.ry||1);
+      if(Math.sqrt(nx*nx+ny*ny) > 1.8) inZoneAll=false;
+    }
+  }
 });
-chk("every match defender stays with the man he matched", stuck===tot, stuck+"/"+tot);
+chk("deep match defenders stay on top of their man", onTopAll);
+chk("underneath match defenders hold their area instead of chasing", inZoneAll);
 
 simSetup("gun_2x2","4","four_verts");
 var two4=w.sideStack(1)[1];
@@ -685,6 +696,46 @@ var stranded=0;
   });
 });
 chk("every eligible has a job on every concept in every formation", stranded===0, stranded+" left standing");
+
+
+/* ---- nobody abandons a zone, and four men actually rush ---- */
+function zoneMiss(form,cov,concept){
+  w.players=[]; w.loadForm(form); w.applyDefPers("nickel"); w.applyFront("over");
+  w.applyCoverage(cov); w.applyPassPlay(concept);
+  w.setAnim(1);
+  var out=0;
+  w.assigns.filter(function(a){return a.kind==="cover"&&a.shape==="circle";}).forEach(function(a){
+    var p=w.playerById(a.pid); if(!p)return;
+    var nx=(w.px(p)-a.tx)/(a.rx||1), ny=(w.py(p)-a.ty)/(a.ry||1);
+    if(Math.sqrt(nx*nx+ny*ny) > 1.8) out++;
+  });
+  w.resetAnim();
+  return out;
+}
+chk("nobody abandons a zone in cover 3 against four verticals", zoneMiss("gun_2x2","3","four_verts")===0);
+chk("nobody abandons a zone in cover 3 against mesh", zoneMiss("gun_2x2","3","mesh")===0);
+chk("nobody abandons a zone in cover 2 against curl-flat", zoneMiss("gun_2x2","2","curl_flat")===0);
+chk("nobody abandons a zone in quarters against trips verticals", zoneMiss("gun_3x1","4","trips_verts")===0);
+
+w.players=[]; w.loadForm("gun_2x2"); w.applyDefPers("nickel"); w.applyFront("tite");
+w.applyCoverage("3"); w.applyPassPlay("slant_flat");
+w.setAnim(1);
+function depthOf(p){ return (w.LOS-w.py(p))/w.YD_V; }
+var rushers=w.players.filter(function(p){return p.color===w.D&&w.isDL(p);});
+chk("all four linemen rush the passer",
+    rushers.every(function(p){return Math.hypot(w.px(p)-p.x,w.py(p)-p.y)/w.YD > 2;}),
+    rushers.map(function(p){return Math.round(Math.hypot(w.px(p)-p.x,w.py(p)-p.y)/w.YD);}).join(","));
+chk("the rush gets into the backfield", rushers.every(function(p){return depthOf(p) < 0;}));
+var unders=w.players.filter(function(p){
+  return w.assigns.some(function(a){
+    return a.pid===p.id&&a.kind==="cover"&&a.shape==="circle"&&!/^Deep/.test(a.role);});});
+chk("underneath defenders sit at their drop depth, not on the line",
+    unders.every(function(p){return depthOf(p) >= 4;}),
+    unders.map(function(p){return p.label+":"+depthOf(p).toFixed(1);}).join(" "));
+chk("no coverage player ends up across the line of scrimmage",
+    w.players.filter(function(p){return p.color===w.D&&!w.isDL(p);})
+      .every(function(p){return depthOf(p) > 1;}));
+w.resetAnim();
 
 console.log("\n" + (fails ? fails + " FAILURE(S)" : "ALL " + "CHECKS PASSED"));
 process.exit(fails ? 1 : 0);

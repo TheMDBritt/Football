@@ -3446,11 +3446,29 @@ function localT(p,t){
 }
 function animPositions(t){
   var pos={},base={},matched={};
+  var tplan=(play==='pass')?throwPlan():null;
   players.forEach(function(p){pos[p.id]={x:p.x,y:p.y};base[p.id]={x:p.x,y:p.y};});
   players.forEach(function(p){
     var pts=playerPath(p);
     if(pts&&pts.length>1){var q=posAt(pts,localT(p,t));if(q)pos[p.id]=q;}
   });
+  // Linemen with no other job rush the passer. Standing still was not a call.
+  if(play==='pass'){
+    var qbP=qbOf();
+    players.forEach(function(p){
+      if(p.color!==D||!isDL(p))return;
+      var busy=assigns.some(function(a){
+        return a.pid===p.id&&(a.kind==='rush'||a.kind==='run'||a.path);
+      });
+      if(busy)return;
+      var side=(p.x-ballX)>=0?1:-1;
+      var tx=qbP?qbP.x+side*Math.round(1.1*YD):ballX+side*Math.round(1.1*YD);
+      var ty=qbP?qbP.y-Math.round(0.6*YD_V):LOS+Math.round(2*YD_V);
+      pos[p.id]=posAt([base[p.id],
+        {x:p.x+side*Math.round(0.8*YD),y:LOS+Math.round(0.9*YD_V)},
+        {x:tx,y:ty}],localT(p,t))||pos[p.id];
+    });
+  }
   // linebackers read the backfield and the pullers
   players.forEach(function(p){
     if(p.color!==D)return;
@@ -3473,6 +3491,30 @@ function animPositions(t){
       if(q.y>capY)q.y=capY;
       if(q.y>base[d.id].y)q.y=base[d.id].y;
     }
+    // stay inside your own area — carry it vertically, pass it off horizontally
+    var za=coverAssignOf(d);
+    if(za&&!m.deep){
+      // An underneath match takes the receiver's WIDTH, not his depth. The curl/flat
+      // player widens with number two; he does not run down to the flat and stand on
+      // the line. He plays at his own depth until the ball is in the air.
+      var sinkM=Math.min(1,Math.max(0,t-0.22)/0.38);
+      q.y=base[d.id].y+(za.ty-base[d.id].y)*sinkM;
+    }
+    if(za)q=clampToZone(q,za,m.deep?1.45:1.15,m.deep?2.2:1.35);
+    // break on the throw
+    if(tplan&&t>=tplan.t0&&tplan.to&&za){
+      var tgM=pos[tplan.to.id];
+      if(tgM){
+        var rxM=za.rx||Math.round(W*0.08),ryM=za.ry||Math.round(4.5*YD_V);
+        if(Math.abs(tgM.x-za.tx)<rxM*1.6&&Math.abs(tgM.y-za.ty)<ryM*2.2){
+          var bkM=Math.min(1,(t-tplan.t0)/Math.max(0.01,tplan.t1-tplan.t0))*0.88;
+          q.x=q.x+(tgM.x-q.x)*bkM;q.y=q.y+(tgM.y-q.y)*bkM;
+        }
+      }
+    }
+    var lim2=LOS-Math.round(1.2*YD_V);
+    if(q.y>lim2)q.y=lim2;             // never chase a route across the line
+
     // ease off the alignment into the match so nobody snaps into place
     var k=Math.min(1,t/0.35);
     pos[d.id]={x:base[d.id].x+(q.x-base[d.id].x)*k,y:base[d.id].y+(q.y-base[d.id].y)*k};
@@ -3506,13 +3548,28 @@ function animPositions(t){
         var cap=thr.y-Math.round(2.2*YD_V);
         if(drop.y>cap)drop.y=cap;
       }else{
-        drop.y=drop.y+(thr.y-drop.y)*k;
-        var floor=thr.y+Math.round(1.5*YD_V);
-        if(drop.y<floor)drop.y=floor;       // stay underneath him
-        var ceil=land.y-Math.round(1.5*YD_V);
-        if(drop.y<ceil)drop.y=ceil;         // and never sink past your own landmark
+        // He settles at his own depth and squeezes to the threat. A shallow route
+        // entering the zone does not pull him forward — he passes it off, and only
+        // comes downhill once the ball is actually in the air.
+        var sink=Math.min(1,Math.max(0,t-0.22)/0.38);
+        drop.y=drop.y+(land.y-drop.y)*sink;
       }
     }
+    // break on the throw — but only when the ball is coming into your area
+    if(tplan&&t>=tplan.t0&&tplan.to){
+      var tgt=pos[tplan.to.id];
+      if(tgt){
+        var near=Math.abs(tgt.x-land.x)<rx*1.6&&Math.abs(tgt.y-land.y)<ry*2.2;
+        if(near){
+          var bk=Math.min(1,(t-tplan.t0)/Math.max(0.01,tplan.t1-tplan.t0))*0.88;
+          drop.x=drop.x+(tgt.x-drop.x)*bk;
+          drop.y=drop.y+(tgt.y-drop.y)*bk;
+        }
+      }
+    }
+    // no coverage player ever crosses the line of scrimmage
+    var lim=LOS-Math.round(2*YD_V);
+    if(drop.y>lim)drop.y=lim;
     pos[d.id]=drop;
   });
   // man defenders trail their receiver, holding their original leverage
@@ -4268,6 +4325,22 @@ function animBallPos(t){
   var u=(t-tp.t0)/(tp.t1-tp.t0);
   return {x:hold.x+(land.x-hold.x)*u,y:hold.y+(land.y-hold.y)*u,
           from:hold,to:land,flying:true};
+}
+// A match defender is still a zone defender. He carries what comes to him and hands
+// it off — he does not follow a receiver out of his own area. Vertical room is
+// generous (you carry a seam); horizontal room is not (you never chase across).
+function coverAssignOf(d){
+  var a=null;
+  assigns.forEach(function(x){if(x.pid===d.id&&x.kind==='cover'&&x.shape==='circle'&&!a)a=x;});
+  return a;
+}
+function clampToZone(q,a,ax,ay){
+  if(!a)return q;
+  var rx=(a.rx||Math.round(W*0.08))*ax, ry=(a.ry||Math.round(4.5*YD_V))*ay;
+  var dx=(q.x-a.tx)/rx, dy=(q.y-a.ty)/ry;
+  var dd=Math.sqrt(dx*dx+dy*dy);
+  if(dd<=1)return q;
+  return {x:a.tx+(q.x-a.tx)/dd, y:a.ty+(q.y-a.ty)/dd};
 }
 function matchPos(d,rec,mode,cush,basePos,recPos){
   var cu=cush*YD_V*0.5;
