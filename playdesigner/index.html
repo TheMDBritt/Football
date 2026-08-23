@@ -44,6 +44,7 @@ h1{font-size:12px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase;
 #play-title{display:block;width:100%;padding:11px 14px;background:var(--panel-2);color:var(--ink);border:none;border-bottom:1px solid var(--line);font-size:16px;font-weight:700;letter-spacing:.6px;text-align:center;outline:none}
 #play-title::placeholder{color:var(--ink-3);font-weight:600}
 #play-title:focus{background:var(--accent-soft)}
+#call-strip{padding:6px 12px;background:var(--panel-2);border-bottom:1px solid var(--line);font-size:11.5px;font-weight:600;letter-spacing:.6px;color:var(--ink-3);text-align:center;text-transform:uppercase;min-height:26px}
 
 canvas{display:block;width:100%;touch-action:none;cursor:crosshair;background:#2f5a26}
 #leg{display:flex;gap:12px;padding:7px 11px;font-size:10.5px;color:var(--ink-3);background:var(--panel-2);flex-wrap:wrap;border-top:1px solid var(--line);align-items:center}
@@ -135,8 +136,24 @@ canvas{display:block;width:100%;touch-action:none;cursor:crosshair;background:#2
       <optgroup label="Under Center">
         <option value="i_form">I-Formation</option>
         <option value="i_form_trips">I-Form Twins</option>
+        <option value="power_i">Power I</option>
         <option value="pro_form">Pro Formation</option>
         <option value="pistol_2x2">Pistol 2x2</option>
+      </optgroup>
+      <optgroup label="Run-first">
+        <option value="wing_t">Wing-T</option>
+        <option value="flexbone">Flexbone</option>
+        <option value="double_wing">Double Wing</option>
+        <option value="wildcat">Wildcat</option>
+        <option value="unbalanced">Unbalanced (tackle over)</option>
+      </optgroup>
+      <optgroup label="Heavy / Goal line">
+        <option value="jumbo">Jumbo (13)</option>
+        <option value="goal_line">Goal Line (23)</option>
+      </optgroup>
+      <optgroup label="Condensed">
+        <option value="gun_bunch">Gun Bunch</option>
+        <option value="gun_stack">Gun Stack</option>
       </optgroup>
     </select>
     <button id="btn-flip" title="Flip formation strength to the other side">Flip</button>
@@ -171,6 +188,14 @@ canvas{display:block;width:100%;touch-action:none;cursor:crosshair;background:#2
     <button id="t-route">Draw</button>
     <button id="t-erase">Erase</button>
     <div class="sep"></div>
+    <label>D Pers:</label>
+    <select id="sel-defpers">
+      <option value="nickel">Nickel 4-2-5</option>
+      <option value="base43">Base 4-3</option>
+      <option value="okie34">3-4 Okie</option>
+      <option value="dime">Dime 4-1-6</option>
+      <option value="goalline">Goal Line 6-3-2</option>
+    </select>
     <label>Front:</label>
     <select id="sel-front">
       <option value="">-- front --</option>
@@ -225,6 +250,7 @@ canvas{display:block;width:100%;touch-action:none;cursor:crosshair;background:#2
     <button id="btn-loadplay">Playbook</button>
   </div>
   <input id="play-title" placeholder="Untitled Play" autocomplete="off" spellcheck="false">
+  <div id="call-strip" aria-live="polite"></div>
   <canvas id="c" role="img" aria-label="Play diagram. Drag players to align them; double-click a player to assign a route, run fit, rush or coverage."></canvas>
   <div id="leg">
     <div class="li"><svg width="13" height="13"><rect x="1" y="1" width="11" height="11" fill="#185FA5" rx="1"/></svg> C locked</div>
@@ -439,6 +465,7 @@ function render(){
   });
   if(!boxView)drawBall();
   ctx.restore();
+  callStrip();
   if(_ready)scheduleSave();
 }
 
@@ -463,6 +490,7 @@ function OL(){
 }
 
 var O='#378ADD',Q='#1D9E75',D='#A32D2D';
+var OLC='#185FA5';
 var SLOT=function(){return Math.round(6*YD);};
 
 var F={
@@ -569,6 +597,82 @@ var F={
     mk(ballX-OL_G-OL_T-SLOT(),LOS+8,'H','circle',O),
     mk(ballX+OL_G+OL_T+SLOT(),LOS+8,'Y','circle',O),
     mk(ballX,LOS+25,'QB','circle',Q),mk(ballX,LOS+65,'RB','circle',O),
+  ]);},
+  /* ---- run-first families ---- */
+  wing_t:function(){return OL().concat([
+    mk(SL_WR,LOS,'X','circle',O),
+    mk(ballX+OL_G+OL_T+Math.round(1.6*YD),LOS,'Y','circle',O),
+    mk(ballX+OL_G+OL_T+Math.round(4.4*YD),LOS+Math.round(1.1*YD_V),'WB','circle',O),
+    mk(ballX,LOS+Math.round(1.3*YD_V),'QB','circle',Q),
+    mk(ballX-Math.round(2.2*YD),LOS+Math.round(3.4*YD_V),'FB','circle',O),
+    mk(ballX-Math.round(4.4*YD),LOS+Math.round(1.1*YD_V),'HB','circle',O),
+  ]);},
+  flexbone:function(){return OL().concat([
+    mk(SL_WR,LOS,'X','circle',O),mk(W-SL_WR,LOS,'Z','circle',O),
+    mk(ballX-OL_G-OL_T-Math.round(3.2*YD),LOS+Math.round(1.1*YD_V),'AB','circle',O),
+    mk(ballX+OL_G+OL_T+Math.round(3.2*YD),LOS+Math.round(1.1*YD_V),'AB','circle',O),
+    mk(ballX,LOS+Math.round(1.3*YD_V),'QB','circle',Q),
+    mk(ballX,LOS+Math.round(4.6*YD_V),'FB','circle',O),
+  ]);},
+  double_wing:function(){return OL().concat([
+    mk(ballX-OL_G-OL_T-Math.round(1.6*YD),LOS,'TE','circle',O),
+    mk(ballX+OL_G+OL_T+Math.round(1.6*YD),LOS,'Y','circle',O),
+    mk(ballX-OL_G-OL_T-Math.round(3.4*YD),LOS+Math.round(1.2*YD_V),'WB','circle',O),
+    mk(ballX+OL_G+OL_T+Math.round(3.4*YD),LOS+Math.round(1.2*YD_V),'WB','circle',O),
+    mk(ballX,LOS+Math.round(1.3*YD_V),'QB','circle',Q),
+    mk(ballX,LOS+Math.round(3.8*YD_V),'FB','circle',O),
+  ]);},
+  power_i:function(){return OL().concat([
+    mk(SL_WR,LOS,'X','circle',O),
+    mk(ballX+OL_G+OL_T+Math.round(1.6*YD),LOS,'Y','circle',O),
+    mk(ballX,LOS+Math.round(1.3*YD_V),'QB','circle',Q),
+    mk(ballX,LOS+Math.round(3.4*YD_V),'FB','circle',O),
+    mk(ballX+Math.round(2.6*YD),LOS+Math.round(3.4*YD_V),'HB','circle',O),
+    mk(ballX,LOS+Math.round(5.6*YD_V),'RB','circle',O),
+  ]);},
+  jumbo:function(){return OL().concat([
+    mk(ballX-OL_G-OL_T-Math.round(1.6*YD),LOS,'TE','circle',O),
+    mk(ballX+OL_G+OL_T+Math.round(1.6*YD),LOS,'Y','circle',O),
+    mk(ballX+OL_G+OL_T+Math.round(3.2*YD),LOS,'U','circle',O),
+    mk(ballX,LOS+Math.round(1.3*YD_V),'QB','circle',Q),
+    mk(ballX,LOS+Math.round(3.4*YD_V),'FB','circle',O),
+    mk(ballX,LOS+Math.round(5.6*YD_V),'RB','circle',O),
+  ]);},
+  goal_line:function(){return OL().concat([
+    mk(ballX-OL_G-OL_T-Math.round(1.6*YD),LOS,'TE','circle',O),
+    mk(ballX+OL_G+OL_T+Math.round(1.6*YD),LOS,'Y','circle',O),
+    mk(ballX-OL_G-OL_T-Math.round(3.2*YD),LOS,'U','circle',O),
+    mk(ballX,LOS+Math.round(1.3*YD_V),'QB','circle',Q),
+    mk(ballX-Math.round(1.8*YD),LOS+Math.round(3.2*YD_V),'FB','circle',O),
+    mk(ballX+Math.round(1.8*YD),LOS+Math.round(3.2*YD_V),'RB','circle',O),
+  ]);},
+  wildcat:function(){return OL().concat([
+    mk(SL_WR,LOS,'X','circle',O),mk(W-SL_WR,LOS,'Z','circle',O),
+    mk(ballX+OL_G+OL_T+Math.round(1.6*YD),LOS,'Y','circle',O),
+    mk(ballX+OL_G+OL_T+Math.round(4*YD),LOS+Math.round(1.1*YD_V),'WB','circle',O),
+    mk(ballX,LOS+Math.round(4.6*YD_V),'RB','circle',Q),
+    mk(ballX-Math.round(3*YD),LOS+Math.round(4.6*YD_V),'QB','circle',O),
+  ]);},
+  gun_bunch:function(){return OL().concat([
+    mk(SL_WR,LOS,'X','circle',O),
+    mk(W-SL_WR,LOS,'Z','circle',O),
+    mk(W-SL_WR-Math.round(2.6*YD),LOS+Math.round(1.1*YD_V),'Y','circle',O),
+    mk(W-SL_WR-Math.round(1.3*YD),LOS+Math.round(2.2*YD_V),'H','circle',O),
+    mk(ballX,QB_Y,'QB','circle',Q),mk(ballX-Math.round(1.4*YD),RB_Y,'RB','circle',O),
+  ]);},
+  gun_stack:function(){return OL().concat([
+    mk(SL_WR,LOS,'X','circle',O),
+    mk(SL_WR,LOS+Math.round(2.4*YD_V),'H','circle',O),
+    mk(W-SL_WR,LOS,'Z','circle',O),
+    mk(W-SL_WR,LOS+Math.round(2.4*YD_V),'Y','circle',O),
+    mk(ballX,QB_Y,'QB','circle',Q),mk(ballX-Math.round(1.4*YD),RB_Y,'RB','circle',O),
+  ]);},
+  unbalanced:function(){return OL().concat([
+    mk(ballX+OL_G+OL_T+Math.round(1.5*YD),LOS,'TK','circle',OLC,true),
+    mk(ballX+OL_G+OL_T+Math.round(3.4*YD),LOS,'Y','circle',O),
+    mk(SL_WR,LOS,'X','circle',O),
+    mk(ballX-OL_G-OL_T-SLOT(),LOS+8,'H','circle',O),
+    mk(ballX,QB_Y,'QB','circle',Q),mk(ballX-Math.round(1.4*YD),RB_Y,'RB','circle',O),
   ]);},
 };
 
@@ -1313,9 +1417,23 @@ function drawRunArt(a,p,col){
   ctx.restore();
   if(a.kind==='carry')drawTag(pts[n2].x,pts[n2].y,a.role,col);
 }
+function drawMotion(a,p){
+  var pts=a.path.map(function(o){return{x:o.x,y:o.y};}),n2=pts.length-1;
+  var r0=R(),dx=pts[1].x-pts[0].x,dy=pts[1].y-pts[0].y,L=Math.hypot(dx,dy)||1;
+  pts[0]={x:p.x+r0*dx/L,y:p.y+r0*dy/L};
+  var ang=Math.atan2(pts[n2].y-pts[n2-1].y,pts[n2].x-pts[n2-1].x);
+  ctx.save();ctx.lineCap='round';ctx.lineJoin='round';
+  ctx.setLineDash([9,6]);
+  ctx.strokeStyle=caseColor(MOTCOL);ctx.fillStyle=caseColor(MOTCOL);ctx.lineWidth=6;strokeSmooth(pts);
+  ctx.strokeStyle=MOTCOL;ctx.fillStyle=MOTCOL;ctx.lineWidth=3;strokeSmooth(pts);
+  ctx.setLineDash([]);arrowHead(pts[n2].x,pts[n2].y,ang,13);
+  ctx.restore();
+  drawTag(pts[n2].x,pts[n2].y,a.role,MOTCOL);
+}
 function drawAssign(a){
   var p=playerById(a.pid);if(!p)return;
   var col=kindCol(a.kind);
+  if(a.kind==='motion'){drawMotion(a,p);return;}
   if(a.kind==='block'||a.kind==='carry'||a.kind==='read'){drawRunArt(a,p,col);return;}
   if(a.targetPid!=null){var rec=playerById(a.targetPid);if(rec){a.tx=rec.x;a.ty=rec.y;drawArrow(p.x,p.y,rec.x,rec.y,col);drawTag(rec.x,rec.y,a.role,col);}return;}
   if(a.shape==='circle'){
@@ -1462,6 +1580,19 @@ function openAssignFor(pi){
     else buildMenu(p.label+' · Coverage',COVERMENU,function(r){chooseAssign(pi,r,'cover');});
     return;
   }
+  if(!isOL(p)&&p.color!==Q){
+    // skill players get motion appended to whatever menu they would normally see
+    var base=play==='run'?(/^(RB|FB|H|HB|AB|WB)$/.test(p.label)?CARRYMENU:PERIMMENU):ROUTES;
+    if(play==='run'&&/^(Y|TE|U|W)$/.test(p.label))base=BLOCKMENU;
+    var opts=base.concat(['— motion —']).concat(MOTIONMENU.map(function(m){return 'Motion: '+m;}));
+    buildMenu(p.label+(play==='run'?' · Run job':' · Route'),opts,function(r){
+      if(r==='— motion —')return;
+      if(r.indexOf('Motion: ')===0){addMotion(pi,r.slice(8));return;}
+      if(play==='pass'){addRoute(pi,r);return;}
+      if(base===CARRYMENU)addCarryAssign(pi,r);else addBlockAssign(pi,r);
+    });
+    return;
+  }
   if(play==='run'){
     if(isOL(p)||/^(Y|TE)$/.test(p.label))buildMenu(p.label+' · Block',BLOCKMENU,function(r){addBlockAssign(pi,r);});
     else if(p.color===Q||/^(RB|FB|H)$/.test(p.label))buildMenu(p.label+' · Run job',CARRYMENU,function(r){addCarryAssign(pi,r);});
@@ -1491,6 +1622,7 @@ function syncToggles(){
 }
 document.getElementById('sel-play').addEventListener('change',function(){play=this.value;closeMenu();render();});
 document.getElementById('sel-run').addEventListener('change',function(){applyRunPlay(this.value);this.value='';});
+document.getElementById('sel-defpers').addEventListener('change',function(){applyDefPers(this.value);});
 document.getElementById('btn-rundir').addEventListener('click',function(){
   runDir=-runDir;this.innerHTML='Run '+(runDir>0?'&rarr;':'&larr;');
   if(curRun)applyRunPlay(curRun);
@@ -1781,7 +1913,6 @@ function applyCoverage(scheme,internal){
    Blocking rules, puller paths, ball-carrier tracks, and one-click concepts.
    Blocks live in `assigns` with kind 'block' (phase 'run'); the carrier uses
    kind 'carry'. Both may carry an explicit `path` for pulls and tracks. */
-var OLC='#185FA5';
 function isOL(p){return p.color===OLC;}
 function olSorted(){return players.filter(isOL).sort(function(a,b){return a.x-b.x;});}
 function olMap(){var m={};players.forEach(function(p){if(isOL(p))m[p.label]=p;});return m;}
@@ -1967,6 +2098,144 @@ function addCarryAssign(pi,role){
   else if(role==='Lead'){var lb=freeBacker(ballX+d*OL_G*0.5);if(lb)blockOn(p,'Lead / Iso',lb);else blockAt(p,'Lead / Iso',ballX+d*OL_G,LOS-Math.round(2.5*YD_V));}
   else track(d,gaps==null?1.2:gaps,4,role,p);
   closeMenu();render();
+}
+
+
+/* ---- personnel grouping: backs and tight ends on the field ---- */
+// attached = within a few yards of the end of the offensive line and up near it
+function attachedToLine(p){
+  var ol=players.filter(isOL);if(!ol.length)return false;
+  var lo=1e9,hi=-1e9;
+  ol.forEach(function(q){if(q.x<lo)lo=q.x;if(q.x>hi)hi=q.x;});
+  var gap=Math.min(Math.abs(p.x-lo),Math.abs(p.x-hi));
+  return gap<=Math.round(3.6*YD)&&p.y<=LOS+Math.round(2.4*YD_V);
+}
+function personnel(){
+  var backs=0,te=0;
+  players.forEach(function(p){
+    if(p.color!==O)return;
+    if(/^(RB|FB|HB|AB|WB)$/.test(p.label))backs++;
+    else if(/^(Y|TE|U|W)$/.test(p.label)&&attachedToLine(p))te++;
+  });
+  return String(Math.min(backs,9))+String(Math.min(te,9));
+}
+function callStrip(){
+  var bits=[];
+  bits.push(personnel()+' pers');
+  var fs=document.getElementById('sel-form');
+  if(fs&&fs.selectedIndex>0)bits.push(fs.options[fs.selectedIndex].text);
+  if(curRun)bits.push(document.querySelector('#sel-run option[value="'+curRun+'"]').text);
+  var hs=document.getElementById('sel-hash');
+  if(hs)bits.push(hs.options[hs.selectedIndex].text);
+  if(curFront)bits.push(document.querySelector('#sel-front option[value="'+curFront+'"]').text);
+  if(curCov)bits.push(document.querySelector('#sel-cov option[value="'+curCov+'"]').text);
+  if(curPress)bits.push(document.querySelector('#sel-press option[value="'+curPress+'"]').text);
+  var el=document.getElementById('call-strip');
+  if(el)el.textContent=bits.join('  ·  ');
+  return bits.join(' · ');
+}
+
+/* ---- motion ---- */
+var MOTCOL='#cfe6ff';
+var MOTIONMENU=['Jet','Orbit','Across','Return','Shift','Custom…'];
+function motionPath(p,type){
+  var d=p.x<ballX?1:-1,g=OL_G,back=LOS+Math.round(1.4*YD_V);
+  switch(type){
+    case 'Jet':    return [{x:p.x,y:p.y},{x:ballX,y:back},{x:ballX+d*Math.round(5*YD),y:back}];
+    case 'Orbit':  return [{x:p.x,y:p.y},{x:ballX-d*Math.round(1*YD),y:LOS+Math.round(4.6*YD_V)},{x:ballX+d*Math.round(3*YD),y:LOS+Math.round(3.4*YD_V)}];
+    case 'Across': return [{x:p.x,y:p.y},{x:ballX,y:back},{x:ballX+d*(g+OL_T+Math.round(2*YD)),y:back}];
+    case 'Return': return [{x:p.x,y:p.y},{x:p.x+d*Math.round(5*YD),y:back},{x:p.x+d*Math.round(1*YD),y:back}];
+    case 'Shift':  return [{x:p.x,y:p.y},{x:p.x+d*Math.round(3.2*YD),y:p.y}];
+    default:       return [{x:p.x,y:p.y},{x:p.x+d*Math.round(4*YD),y:back}];
+  }
+}
+function addMotion(pi,type){
+  var p=players[pi];
+  if(type==='Custom…'){var v=prompt('Motion label:');if(v===null)return;v=v.trim();if(!v)return;saveH();pushMotion(p,v,motionPath(p,'Jet'));closeMenu();render();return;}
+  saveH();pushMotion(p,type,motionPath(p,type));closeMenu();render();
+}
+function pushMotion(p,role,pts){
+  assigns=assigns.filter(function(a){return !(a.pid===p.id&&a.kind==='motion');});
+  var q=pts.map(function(o){return{x:Math.round(o.x),y:Math.round(o.y)};});
+  assigns.push({pid:p.id,phase:'both',kind:'motion',role:role,path:q,tx:q[q.length-1].x,ty:q[q.length-1].y});
+}
+
+/* ---- defensive personnel packages ---- */
+function dbY(){return LOS-Math.round(1.2*YD_V);}
+var DEFPERS={
+  nickel:function(trips){return autoDef(trips?'gun_3x1':'gun_2x2');},
+  base43:function(){
+    var DLY=LOS-Math.round(1.2*YD_V),LBY=LOS-Math.round(4.5*YD_V),SY=LOS-Math.round(12*YD_V);
+    return[
+      mk(ballX-Math.round(2*YD),DLY,dtTech(-2*YD),'circle',D,false,null,true),
+      mk(ballX+Math.round(2*YD),DLY,dtTech(2*YD),'circle',D,false,null,true),
+      mk(ballX-Math.round(4.5*YD),DLY,'DE','circle',D),
+      mk(ballX+Math.round(4.5*YD),DLY,'DE','circle',D),
+      mk(ballX+Math.round(4.5*YD),LBY,'SAM','circle',D,false,'4-5 yds'),
+      mk(ballX,LBY,'MIKE','circle',D,false,'4-5 yds'),
+      mk(ballX-Math.round(4*YD),LBY,'WILL','circle',D,false,'5 yds'),
+      mk(SL_WR+Math.round(YD),dbY(),'CB','circle',D),
+      mk(W-SL_WR-Math.round(YD),dbY(),'CB','circle',D),
+      mk(ballX-Math.round(3*YD),SY,'FS','circle',D),
+      mk(ballX+Math.round(3*YD),SY,'SS','circle',D)];
+  },
+  okie34:function(){
+    var DLY=LOS-Math.round(1.2*YD_V),EDY=LOS-Math.round(1.4*YD_V),LBY=LOS-Math.round(4.5*YD_V),SY=LOS-Math.round(12*YD_V);
+    return[
+      mk(ballX,DLY,'NT','circle',D),
+      mk(ballX-Math.round(3.6*YD),DLY,'DE','circle',D),
+      mk(ballX+Math.round(3.6*YD),DLY,'DE','circle',D),
+      mk(ballX-Math.round(6*YD),EDY,'JACK','circle',D,false,'edge'),
+      mk(ballX+Math.round(6*YD),EDY,'RUSH','circle',D,false,'edge'),
+      mk(ballX-Math.round(1.8*YD),LBY,'MIKE','circle',D,false,'4-5 yds'),
+      mk(ballX+Math.round(1.8*YD),LBY,'WILL','circle',D,false,'4-5 yds'),
+      mk(SL_WR+Math.round(YD),dbY(),'CB','circle',D),
+      mk(W-SL_WR-Math.round(YD),dbY(),'CB','circle',D),
+      mk(ballX-Math.round(3*YD),SY,'FS','circle',D),
+      mk(ballX+Math.round(3*YD),SY,'SS','circle',D)];
+  },
+  dime:function(){
+    var DLY=LOS-Math.round(1.2*YD_V),LBY=LOS-Math.round(4.5*YD_V),SY=LOS-Math.round(12*YD_V),NY=LOS-Math.round(4.5*YD_V);
+    return[
+      mk(ballX-Math.round(2*YD),DLY,dtTech(-2*YD),'circle',D,false,null,true),
+      mk(ballX+Math.round(2*YD),DLY,dtTech(2*YD),'circle',D,false,null,true),
+      mk(ballX-Math.round(4.5*YD),DLY,'DE','circle',D),
+      mk(ballX+Math.round(4.5*YD),DLY,'DE','circle',D),
+      mk(ballX,LBY,'MIKE','circle',D,false,'4-5 yds'),
+      mk(ballX-Math.round(6*YD),NY,'NICK','circle',D),
+      mk(ballX+Math.round(6*YD),NY,'DIME','circle',D),
+      mk(SL_WR+Math.round(YD),dbY(),'CB','circle',D),
+      mk(W-SL_WR-Math.round(YD),dbY(),'CB','circle',D),
+      mk(ballX-Math.round(3*YD),SY,'FS','circle',D),
+      mk(ballX+Math.round(3*YD),SY,'SS','circle',D)];
+  },
+  goalline:function(){
+    var DLY=LOS-Math.round(1*YD_V),LBY=LOS-Math.round(3.2*YD_V),SY=LOS-Math.round(6*YD_V);
+    return[
+      mk(ballX-Math.round(1.1*YD),DLY,dtTech(-1.1*YD),'circle',D,false,null,true),
+      mk(ballX+Math.round(1.1*YD),DLY,dtTech(1.1*YD),'circle',D,false,null,true),
+      mk(ballX-Math.round(3.3*YD),DLY,'DT','circle',D),
+      mk(ballX+Math.round(3.3*YD),DLY,'DT','circle',D),
+      mk(ballX-Math.round(5.5*YD),DLY,'DE','circle',D),
+      mk(ballX+Math.round(5.5*YD),DLY,'DE','circle',D),
+      mk(ballX-Math.round(2.4*YD),LBY,'WILL','circle',D,false,'3 yds'),
+      mk(ballX,LBY,'MIKE','circle',D,false,'3 yds'),
+      mk(ballX+Math.round(2.4*YD),LBY,'SAM','circle',D,false,'3 yds'),
+      mk(ballX-Math.round(8*YD),SY,'CB','circle',D),
+      mk(ballX+Math.round(8*YD),SY,'CB','circle',D)];
+  }
+};
+var curDefPers='nickel';
+function applyDefPers(key){
+  if(!key||!DEFPERS[key])return;
+  saveH();
+  var off=players.filter(function(p){return p.color!==D;});
+  var trips=/3x1|trips|empty/.test(curForm||'');
+  players=off.concat(DEFPERS[key](trips));
+  curDefPers=key;
+  ensureIds();
+  assigns=assigns.filter(function(a){return playerById(a.pid);});
+  alignDBsToWRs();refitDefense();render();
 }
 
 function applyRunPlay(key){

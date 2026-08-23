@@ -123,5 +123,79 @@ let threw = null;
 try { w.applyCoverage("3"); w.applyTeamStunt("tex_strong"); w.render(); } catch (e) { threw = e.message; }
 chk("full render with coverage + stunt does not throw", threw === null, threw || "");
 
+
+/* ---- formations, personnel groupings, motion, defensive packages ---- */
+[["gun_2x2","10"],["i_form","21"],["pro_form","12"],["flexbone","30"],
+ ["wing_t","31"],["goal_line","23"],["jumbo","23"]].forEach(function(c){
+  w.players=[]; w.loadForm(c[0]);
+  chk("personnel " + c[0], w.personnel()===c[1], w.personnel()+" want "+c[1]);
+});
+
+["wing_t","flexbone","double_wing","wildcat","jumbo","goal_line",
+ "gun_bunch","gun_stack","unbalanced","power_i"].forEach(function(f){
+  w.players=[];
+  var t=null; try{ w.loadForm(f); }catch(e){ t=e.message; }
+  var off=w.players.filter(function(p){return p.color!==w.D;}).length;
+  chk("formation "+f+" fields 11 on offense", t===null && off===11, t||off);
+});
+
+["nickel","base43","okie34","dime","goalline"].forEach(function(k){
+  w.players=[]; w.loadForm("gun_2x2"); w.applyDefPers(k);
+  chk("defensive package "+k+" fields 11",
+      w.players.filter(function(p){return p.color===w.D;}).length===11);
+});
+w.players=[]; w.loadForm("gun_2x2"); w.applyDefPers("okie34");
+chk("3-4 has a nose and two edge players",
+    w.players.some(function(p){return p.label==="NT";}) &&
+    w.players.filter(function(p){return /JACK|RUSH/.test(p.label);}).length===2);
+w.applyDefPers("base43");
+chk("4-3 has a Sam linebacker", w.players.some(function(p){return p.label==="SAM";}));
+w.applyDefPers("dime");
+chk("dime fields six defensive backs",
+    w.players.filter(function(p){return /CB|FS|SS|NICK|DIME/.test(p.label);}).length===6);
+w.applyDefPers("nickel");
+
+w.players=[]; w.loadForm("gun_3x1");
+var zr=w.players.find(function(p){return p.label==="Z";});
+w.addMotion(w.players.indexOf(zr),"Jet");
+var mo=w.assigns.find(function(a){return a.kind==="motion";});
+chk("jet motion builds a path", !!mo && mo.path.length>=3, mo && mo.role);
+
+w.applyFront("over"); w.applyCoverage("3"); w.render();
+var strip=w.document.getElementById("call-strip").textContent;
+chk("call strip reports personnel, front and coverage",
+    /pers/.test(strip) && /Over/.test(strip) && /Cover 3/.test(strip), strip);
+
+/* ---- run game ---- */
+w.players=[]; w.loadForm("i_form"); w.applyFront("over");
+function runRoles(){
+  return w.assigns.filter(function(a){return a.phase==="run";})
+    .map(function(a){return w.playerById(a.pid).label+":"+a.role;});
+}
+w.runDir=1; w.applyRunPlay("power");
+var P=runRoles();
+chk("power pulls the backside guard", P.some(function(r){return /^LG:Pull . wrap/.test(r);}), P.join(" "));
+chk("power blocks down playside", P.filter(function(r){return /:Down$/.test(r);}).length>=2);
+chk("power kicks the end out", P.some(function(r){return /Kick out/.test(r);}));
+chk("power tracks the B gap", P.some(function(r){return /Track . B/.test(r);}));
+
+w.applyRunPlay("inside_zone");
+var Z2=runRoles();
+chk("zone has no pullers", !Z2.some(function(r){return /Pull/.test(r);}));
+chk("zone cuts off backside", Z2.some(function(r){return /Cut off/.test(r);}));
+
+w.applyRunPlay("zone_read");
+var rk=w.assigns.find(function(a){return a.kind==="read";});
+chk("zone read marks a read key", !!rk && w.playerById(rk.pid).label==="DE");
+chk("the read key is left unblocked",
+    !w.assigns.some(function(a){return a.targetPid===rk.pid;}));
+
+w.runDir=-1; w.applyRunPlay("power");
+chk("flipping run direction pulls the other guard",
+    runRoles().some(function(r){return /^RG:Pull . wrap/.test(r);}));
+w.runDir=1; w.applyRunPlay("counter_gt");
+chk("counter pulls two men",
+    runRoles().filter(function(r){return /Pull/.test(r);}).length===2);
+
 console.log("\n" + (fails ? fails + " FAILURE(S)" : "ALL " + "CHECKS PASSED"));
 process.exit(fails ? 1 : 0);
