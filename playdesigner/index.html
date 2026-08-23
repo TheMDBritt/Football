@@ -68,6 +68,11 @@ canvas.grabbing{touch-action:none}
 #ctrls .sep{width:1px;height:22px;background:var(--line);margin:0 3px}
 #anim{flex:1;min-width:120px;accent-color:var(--accent);height:28px}
 #assign-card{display:none;padding:11px 14px;background:var(--accent-soft);border-top:1px solid var(--line);font-size:13px;line-height:1.6;color:var(--ink)}
+#assign-card table.chk{border-collapse:collapse;width:100%;margin-top:6px;font-size:12.5px}
+#assign-card table.chk th{text-align:left;font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--ink-3);padding:4px 8px 4px 0;border-bottom:1px solid var(--line-2)}
+#assign-card table.chk td{padding:4px 8px 4px 0;border-bottom:1px solid var(--line)}
+#assign-card table.chk td.good{color:var(--accent-hi);font-weight:700}
+#assign-card .note{margin-top:8px;font-size:12px;color:var(--ink-2)}
 #assign-card b{display:block;font-size:15px;letter-spacing:.5px;margin-bottom:4px;color:var(--accent-hi)}
 #toast{position:fixed;left:50%;bottom:22px;transform:translateX(-50%) translateY(14px);background:var(--ink);color:var(--bg);padding:11px 18px;border-radius:7px;font-size:13px;font-weight:500;box-shadow:0 8px 26px rgba(20,30,25,.28);opacity:0;pointer-events:none;transition:opacity .18s,transform .18s;z-index:300;max-width:90vw;text-align:center}
 #toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
@@ -317,6 +322,7 @@ canvas.grabbing{touch-action:none}
     <label for="sel-player">View</label>
     <select id="sel-player"><option value="">All 22</option></select>
     <button id="btn-quiz" title="Hide the assignment and quiz yourself">Quiz</button>
+    <button id="btn-check" title="Run this concept against every coverage">Check</button>
   </div>
   <div id="assign-card" aria-live="polite"></div>
   <div id="leg">
@@ -583,6 +589,14 @@ function render(){
     var al=dimFor(a.pid);
     if(al<1){ctx.save();ctx.globalAlpha=al;drawAssign(a);ctx.restore();}else drawAssign(a);
   });
+  if(!boxView&&!quizOn){
+    conflictDefenders().forEach(function(p){
+      if(visIds&&!visIds[p.id])return;
+      ctx.save();ctx.strokeStyle=RDCOL;ctx.lineWidth=2.6;ctx.setLineDash([4,3]);
+      ctx.beginPath();ctx.arc(px(p),py(p),R()*1.6,0,Math.PI*2);ctx.stroke();
+      ctx.restore();
+    });
+  }
   if(!boxView)drawBall();
   ctx.restore();
   callStrip();fillPlayerSelect();renderCard();
@@ -1913,8 +1927,9 @@ document.getElementById('btn-reset').addEventListener('click',resetAnim);
 document.getElementById('btn-fit').addEventListener('click',resetView);
 document.getElementById('anim').addEventListener('input',function(){stopAnim();setAnim(this.value/100);});
 document.getElementById('sel-speed').addEventListener('change',function(){animSpeed=parseFloat(this.value);});
-document.getElementById('sel-player').addEventListener('change',function(){focusId=this.value?parseInt(this.value,10):null;render();});
+document.getElementById('sel-player').addEventListener('change',function(){focusId=this.value?parseInt(this.value,10):null;cardMode='player';render();});
 document.getElementById('btn-quiz').addEventListener('click',function(){quizOn=!quizOn;this.classList.toggle('act',quizOn);render();});
+document.getElementById('btn-check').addEventListener('click',coverageCheck);
 
 /* ---- keyboard: tab to the field, arrow to select, shift+arrow to nudge ---- */
 var kbIndex=-1;
@@ -2688,6 +2703,7 @@ var PASSPLAY={
 var curPass='';
 function applyPassPlay(key){
   if(!key||!PASSPLAY[key])return;
+  cardMode='player';
   saveH();clearPass();clearRun();curRun='';
   play='pass';document.getElementById('sel-play').value='pass';
   var d=frontDir()||1;
@@ -2744,6 +2760,28 @@ function animPositions(t){
     var pts=playerPath(p);
     if(pts&&pts.length>1){var q=posAt(pts,t);if(q)pos[p.id]=q;}
   });
+  // zone defenders sink to their landmark, then break on the nearest threat in it
+  assigns.forEach(function(a){
+    if(a.kind!=='cover'||a.shape!=='circle')return;
+    var d=playerById(a.pid);if(!d)return;
+    var drop=posAt([base[d.id],{x:a.tx,y:a.ty}],Math.min(1,t/0.55));
+    if(t>0.55){
+      var rx=a.rx||Math.round(W*0.08),ry=a.ry||Math.round(4.5*YD_V),near=null,nd=1e9;
+      players.forEach(function(o){
+        if(o.color===D||isOL(o))return;
+        var q=pos[o.id];if(!q)return;
+        var dx=(q.x-a.tx)/rx,dy=(q.y-a.ty)/ry;
+        if(dx*dx+dy*dy>1.15)return;                 // not in this zone
+        var dist=Math.hypot(q.x-drop.x,q.y-drop.y);
+        if(dist<nd){nd=dist;near=q;}
+      });
+      if(near){
+        var k=Math.min(1,(t-0.55)/0.45)*0.7;        // close, but do not teleport
+        drop={x:drop.x+(near.x-drop.x)*k,y:drop.y+(near.y-drop.y)*k};
+      }
+    }
+    pos[d.id]=drop;
+  });
   // man defenders trail their receiver, holding their original leverage
   assigns.forEach(function(a){
     if(a.kind!=='cover'||a.targetPid==null)return;
@@ -2785,7 +2823,7 @@ function px(p){return _animPos&&_animPos[p.id]?_animPos[p.id].x:p.x;}
 function py(p){return _animPos&&_animPos[p.id]?_animPos[p.id].y:p.y;}
 
 /* ================= PLAYER VIEW ================= */
-var focusId=null,quizOn=false;
+var focusId=null,quizOn=false,cardMode='player';
 function fillPlayerSelect(){
   var sel=document.getElementById('sel-player');if(!sel)return;
   var keep=sel.value;
@@ -2851,6 +2889,7 @@ function assignmentText(p){
 }
 function renderCard(){
   var el=document.getElementById('assign-card');if(!el)return;
+  if(cardMode==='check')return;                        // the coverage report owns the panel
   var p=focusId?playerById(focusId):null;
   if(!p){el.style.display='none';el.textContent='';return;}
   el.style.display='block';
@@ -3050,8 +3089,97 @@ function autoTags(){
   return t;
 }
 
+
+/* ================= COVERAGE CHECK =================
+   Runs the called concept against every coverage shell and reports where the ball
+   should go. Separation is measured at each route's break point against the nearest
+   defender who is actually responsible for that area. */
+function respPoint(d,rec,endPt){
+  var a=null;
+  for(var i=0;i<assigns.length;i++){
+    var x=assigns[i];
+    if(x.pid!==d.id||x.kind!=='cover')continue;
+    a=x;break;
+  }
+  if(!a)return null;
+  if(a.targetPid!=null)return a.targetPid===rec.id?{x:endPt.x,y:endPt.y,man:true}:null;
+  return {x:a.tx,y:a.ty,man:false};
+}
+function separationTable(){
+  var rows=[];
+  routes.forEach(function(r){
+    if(r.type!=='tree')return;
+    var p=playerById(r.pid);if(!p)return;
+    var pts=routePoints(p,r.concept,r.stem),end=pts[pts.length-1];
+    var best=1e9,who='—';
+    players.forEach(function(d){
+      if(d.color!==D)return;
+      var rp=respPoint(d,p,end);if(!rp)return;
+      var sep=rp.man?Math.max(0,Math.hypot(d.x-p.x,d.y-p.y)):Math.hypot(rp.x-end.x,rp.y-end.y);
+      if(sep<best){best=sep;who=d.label;}
+    });
+    if(best<1e9)rows.push({rec:p.label,concept:r.concept,sep:best/YD,cov:who});
+  });
+  rows.sort(function(a,b){return b.sep-a.sep;});
+  return rows;
+}
+// a defender carrying a run fit AND a coverage drop is the RPO conflict
+function conflictDefenders(){
+  return players.filter(function(p){
+    if(p.color!==D)return false;
+    var run=false,pass=false;
+    assigns.forEach(function(a){
+      if(a.pid!==p.id)return;
+      if(a.kind==='run')run=true;                       // an actual gap/fit responsibility
+      else if(a.kind==='cover')pass=true;
+    });
+    return run&&pass;
+  });
+}
+var COVKEYS=[['0','Cover 0'],['1','Cover 1'],['2','Tampa 2'],['3','Cover 3'],['4','Cover 4'],
+             ['palm','Palms'],['6','Cover 6'],['2man','2-Man'],['ripliz','Rip/Liz']];
+function coverageCheck(){
+  if(play!=='pass'||!routes.some(function(r){return r.type==='tree';})){
+    toast('Call a pass concept first, then check it.');return;
+  }
+  var keep=snapshot(),keepCov=curCov,out=[];
+  COVKEYS.forEach(function(c){
+    applyCoverage(c[0],true);
+    var t=separationTable();
+    if(t.length)out.push({name:c[1],best:t[0],worst:t[t.length-1]});
+  });
+  applySnap(keep);curCov=keepCov;
+  var el=document.getElementById('assign-card');
+  cardMode='check';
+  el.style.display='block';el.innerHTML='';
+  var h=document.createElement('b');
+  h.textContent='Concept check — where the ball goes vs each shell';
+  el.appendChild(h);
+  var tb=document.createElement('table');tb.className='chk';
+  var hdr=document.createElement('tr');
+  ['Coverage','Best matchup','Sep'].forEach(function(x){var th=document.createElement('th');th.textContent=x;hdr.appendChild(th);});
+  tb.appendChild(hdr);
+  out.forEach(function(o){
+    var tr=document.createElement('tr');
+    [o.name,o.best.rec+' — '+o.best.concept+' vs '+o.best.cov,o.best.sep.toFixed(1)+' yd'].forEach(function(x,i){
+      var td=document.createElement('td');td.textContent=x;
+      if(i===2&&o.best.sep>=5)td.className='good';
+      tr.appendChild(td);
+    });
+    tb.appendChild(tr);
+  });
+  el.appendChild(tb);
+  var cf=conflictDefenders();
+  var note=document.createElement('div');note.className='note';
+  note.textContent=cf.length?('Conflict defender'+(cf.length>1?'s':'')+': '+cf.map(function(p){return p.label;}).join(', ')+' — run fit and a coverage drop.')
+                            :'No conflict defender in this call.';
+  el.appendChild(note);
+  render();
+}
+
 function applyRunPlay(key){
   if(!key||!RUNPLAY[key])return;
+  cardMode='player';
   saveH();clearRun();clearPass();curPass='';
   play='run';document.getElementById('sel-play').value='run';
   RUNPLAY[key](runDir);

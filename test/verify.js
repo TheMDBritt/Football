@@ -400,5 +400,42 @@ chk("pointer mapping survives a zoom", (function(){
 chk("the toolbar is grouped into labelled bands",
     (html.match(/class="tbrow"/g)||[]).length===3 && /class="grp">Offense</.test(html));
 
+
+/* ---- coverage check, zone reaction, conflict defenders ---- */
+w.players=[]; w.loadForm("gun_2x2"); w.applyFront("over"); w.applyCoverage("3");
+w.applyPassPlay("four_verts");
+var beforeD=JSON.stringify(w.assigns.map(function(a){return a.pid+a.role;}));
+w.coverageCheck();
+var ck=w.document.getElementById("assign-card").textContent;
+chk("check reports every coverage shell",
+    ["Cover 0","Cover 1","Tampa 2","Cover 3","Cover 4","Palms","Cover 6","2-Man","Rip/Liz"]
+      .every(function(k){return ck.indexOf(k)>=0;}));
+chk("check names a best matchup with separation", /\d+\.\d yd/.test(ck));
+chk("check restores the defence it started from",
+    JSON.stringify(w.assigns.map(function(a){return a.pid+a.role;}))===beforeD);
+chk("check leaves the coverage call intact", w.curCov==="3");
+var seps=w.separationTable();
+chk("separation is reported per route in yards",
+    seps.length>=4 && seps.every(function(r){return r.sep>=0 && r.sep<60;}));
+
+w.applyRunPlay("zone_read"); w.applyCoverage("3");
+w.players.filter(function(p){return /MIKE|WILL/.test(p.label);}).forEach(function(p){
+  w.chooseAssign(w.players.indexOf(p),"B gap","run");
+});
+var cfd=w.conflictDefenders().map(function(p){return p.label;});
+chk("only defenders with a fit and a drop are flagged as conflicted",
+    cfd.length>0 && cfd.every(function(l){return /MIKE|WILL|SAM|NICK/.test(l);}), cfd.join(","));
+
+w.players=[]; w.loadForm("gun_2x2"); w.applyFront("over"); w.applyCoverage("3");
+w.applyPassPlay("curl_flat");
+var hk=w.players.find(function(p){return p.label==="MIKE";});
+var hy=hk.y;
+w.setAnim(0.5); var drop={x:w.px(hk),y:w.py(hk)};
+w.setAnim(1.0); var brk={x:w.px(hk),y:w.py(hk)};
+chk("zone defender sinks to his landmark", Math.abs(drop.y-hy)>2);
+chk("zone defender then breaks on a threat in his area",
+    Math.hypot(brk.x-drop.x,brk.y-drop.y)>2);
+w.resetAnim();
+
 console.log("\n" + (fails ? fails + " FAILURE(S)" : "ALL " + "CHECKS PASSED"));
 process.exit(fails ? 1 : 0);
