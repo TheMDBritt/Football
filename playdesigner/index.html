@@ -1444,6 +1444,8 @@ function submitForm(mode,orig,name,pb,tagsStr,downStr,oppStr){
   if(!name){toast('Give the play a name first.');return;}
   pb=(pb||'').trim()||'Unfiled';
   var tags=parseTags(tagsStr),plays=getPlays();
+  // a new play always gets useful tags, even if the box was cleared
+  if(!tags.length&&mode!=='edit')tags=parseTags(autoTags().join(', '));
   var idx=-1;for(var i=0;i<plays.length;i++){if(plays[i].name===name){idx=i;break;}}
   var selfIdx=(mode==='edit'&&orig&&orig.id)?plays.findIndex(function(q){return q.id===orig.id;}):-1;
   if(mode==='edit'){
