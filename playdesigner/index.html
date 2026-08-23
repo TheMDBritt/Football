@@ -432,6 +432,10 @@ canvas.grabbing{touch-action:none}
       <option value="fire_zone">Fire Zone (5)</option>
       <option value="cover0">Cover 0 (All-Out)</option>
     </select></label>
+            <div class="btnrow">
+              <button id="btn-3way" title="Tie the box defenders together so their gaps bump with the sniffer">Tie 3-way fit</button>
+              <button id="btn-3way-off" title="Untie them">Untie</button>
+            </div>
             <label class="fld"><span>Line game</span><select id="sel-stunt">
       <option value="">-- line game --</option>
       <option value="tex_strong">TEX (strong)</option>
@@ -1530,7 +1534,7 @@ function submitForm(mode,orig,name,pb,tagsStr,downStr,oppStr){
     ballX:ballX,hash:document.getElementById('sel-hash').value,
     players:players,routes:routes,assigns:assigns,zones:zones,notes:notesEl.value,
     defView:defView,boxView:boxView,flip:flip,play:play,
-    form:curForm,front:curFront,press:curPress,cov:curCov,run:curRun,runDir:runDir,pass:curPass,defPers:curDefPers,
+    form:curForm,front:curFront,press:curPress,cov:curCov,run:curRun,runDir:runDir,pass:curPass,defPers:curDefPers,fitGroup:fitGroup,
     playbook:pb,tags:tags,
     down:((downStr||'').split(',')[0]||'').trim(),dist:((downStr||'').split(',')[1]||'').trim(),
     opponent:(oppStr||'').trim()};
@@ -1553,6 +1557,7 @@ function loadPlay(p){
   flip=!!p.flip;var fb=document.getElementById('btn-flip');if(fb)fb.classList.toggle('act',flip);
   curFront=p.front||'';curPress=p.press||'';curForm=p.form||'';curCov=p.cov||'';
   curRun=p.run||'';runDir=p.runDir||1;curPass=p.pass||'';curDefPers=p.defPers||'nickel';
+  fitGroup=Array.isArray(p.fitGroup)?p.fitGroup:[];
   play=p.play||'pass';boxView=!!p.boxView;
   // put the toolbar back in the state this play was saved in
   var setSel=function(id,v){var el=document.getElementById(id);if(el)el.value=v||'';};
@@ -1696,7 +1701,7 @@ function saveSession(){
   try{
     localStorage.setItem(SKEY,JSON.stringify({
       ballX:ballX,play:play,defView:defView,flip:flip,
-      curForm:curForm,curFront:curFront,curPress:curPress,curCov:curCov,curRun:curRun,runDir:runDir,curPass:curPass,curDefPers:curDefPers,
+      curForm:curForm,curFront:curFront,curPress:curPress,curCov:curCov,curRun:curRun,runDir:runDir,curPass:curPass,curDefPers:curDefPers,fitGroup:fitGroup,
       players:players,routes:routes,assigns:assigns,zones:zones
     }));
   }catch(e){}
@@ -1710,6 +1715,7 @@ function restoreSession(){
   play=raw.play||'pass';defView=!!raw.defView;flip=!!raw.flip;
   curForm=raw.curForm||'';curFront=raw.curFront||'';curPress=raw.curPress||'';curCov=raw.curCov||'';
   curRun=raw.curRun||'';runDir=raw.runDir||1;curPass=raw.curPass||'';curDefPers=raw.curDefPers||'nickel';
+  fitGroup=Array.isArray(raw.fitGroup)?raw.fitGroup:[];
   // back-compat: promote old 1T/3T labels to dynamic interior-DT naming
   players.forEach(function(pl){if(!pl.dt&&(pl.label==='1T'||pl.label==='3T')){pl.dt=true;updateDTLabel(pl);}});
   ensureIds();normalizeAssigns();
@@ -2119,7 +2125,15 @@ function manCover(hole){
 function openAssignFor(pi){
   var p=players[pi];
   if(p.color===D){
-    if(play==='run')buildMenu(p.label+' · Run fit',RUNMENU,function(r){chooseAssign(pi,r,'run');});
+    if(play==='run')buildMenu(p.label+' · Run fit',
+      RUNMENU.concat([fitGroup.indexOf(p.id)>=0?'— take out of 3-way fit —':'— add to 3-way fit —']),
+      function(r){
+        if(/3-way fit/.test(r)){saveH();toggleThreeWay(p);
+          assigns=assigns.filter(function(a){return !a.fit3;});
+          if(fitGroup.length>=2)applyThreeWay();
+          closeMenu();syncToggles();render();return;}
+        chooseAssign(pi,r,'run');
+      });
     else if(isDL(p))buildMenu(p.label+' · Pass rush',RUSHMENU,function(r){chooseAssign(pi,r,'rush');});
     else buildMenu(p.label+' · Coverage',COVERMENU,function(r){chooseAssign(pi,r,'cover');});
     return;
@@ -2182,13 +2196,26 @@ function setTool(t){
   syncToggles();
 }
 function syncToggles(){
-  var m={'btn-defview':defView,'btn-boxview':boxView,'btn-flip':flip,'btn-snap':snapOn};
+  var m={'btn-defview':defView,'btn-boxview':boxView,'btn-flip':flip,'btn-snap':snapOn,
+         'btn-3way':(typeof fitGroup!=='undefined'&&fitGroup&&fitGroup.length>=2)};
   Object.keys(m).forEach(function(id){var b=document.getElementById(id);if(b)b.classList.toggle('act',!!m[id]);});
   var rd=document.getElementById('btn-rundir');if(rd)rd.innerHTML='Run '+(runDir>0?'&rarr;':'&larr;');
 }
 document.getElementById('sel-play').addEventListener('change',function(){play=this.value;closeMenu();render();});
 document.getElementById('sel-run').addEventListener('change',function(){applyRunPlay(this.value);this.value='';});
 document.getElementById('sel-defpers').addEventListener('change',function(){applyDefPers(this.value);});
+document.getElementById('btn-3way').addEventListener('click',function(){
+  saveH();
+  var n2=autoTieThreeWay();
+  if(!n2){toast('No box defenders to tie.');return;}
+  applyThreeWay();syncToggles();render();
+  toast('Tied '+fitMembers().map(function(p){return p.label;}).join(', ')+' to the three-way fit.');
+});
+document.getElementById('btn-3way-off').addEventListener('click',function(){
+  saveH();
+  assigns=assigns.filter(function(a){return !a.fit3;});
+  fitGroup=[];syncToggles();render();toast('Untied.');
+});
 document.getElementById('sel-pass').addEventListener('change',function(){applyPassPlay(this.value);this.value='';});
 document.getElementById('btn-play').addEventListener('click',function(){animPlaying?stopAnim():startAnim();});
 document.getElementById('btn-reset').addEventListener('click',resetAnim);
@@ -4149,13 +4176,26 @@ function snifferInsert(sn){
     if(x.pid!==sn.id||x.phase!=='run')return;
     if(x.kind==='block'||x.kind==='carry')a=x;
   });
-  if(!a)return {x:sn.x,y:LOS,crossed:false};
+  if(!a)return {x:sn.x,y:LOS,crossed:false,inserting:false};
   var end=a.path?a.path[a.path.length-1]:{x:a.tx,y:a.ty};
   var crossed=Math.sign(end.x-ballX)!==Math.sign(sn.x-ballX)&&Math.abs(end.x-ballX)>OL_G*0.5;
-  return {x:end.x,y:end.y,crossed:crossed};
+  // What he is DOING decides whether the fit has to bump. Arcing across, kicking the
+  // edge, pulling or leading up is an insert. Blocking the man over him is not — that
+  // is just a tight end doing his job, and the linebackers keep their base gaps.
+  var inserting=/Arc|Kick|Lead|Pull|Wrap/i.test(a.role||'');
+  return {x:end.x,y:end.y,crossed:crossed,inserting:inserting};
 }
 function defenderRunPath(p){
-  if(play!=='run'||!isBacker(p))return null;
+  if(play!=='run')return null;
+  // a defender tied into the three-way fit runs to the gap the fit gave him
+  if(fitGroup.indexOf(p.id)>=0){
+    var mine=null;
+    assigns.forEach(function(a){if(a.pid===p.id&&a.fit3)mine=a;});
+    if(mine)return [{x:p.x,y:p.y},
+      {x:(p.x+mine.tx)/2,y:p.y+Math.round(0.5*YD_V)},
+      {x:mine.tx,y:mine.ty}];
+  }
+  if(!isBacker(p))return null;
   var aim=ballAim();if(!aim)return null;
   // a blitz or a hand-drawn path is an explicit call — leave it alone
   var explicit=assigns.some(function(a){
@@ -4432,8 +4472,120 @@ function drawRecBanner(){
   ctx.restore();
 }
 
+
+/* ================= THREE-WAY FIT =================
+   A sniffer adds a gap wherever he inserts, so fixed gap assignments break down.
+   Linked defenders bump together: whichever gap he goes through gets fitted from
+   both sides — one man spills it, one man boxes it — and the third takes the
+   cutback behind. If he stays home, all three play their base gaps. */
+function frontGaps(){
+  var m=olMap(),g=[];
+  var c=m.C?m.C.x:ballX;
+  var lg=m.LG?m.LG.x:c-OL_G, rg=m.RG?m.RG.x:c+OL_G;
+  var lt=m.LT?m.LT.x:lg-OL_T, rt=m.RT?m.RT.x:rg+OL_T;
+  var teL=tightTo(-1),teR=tightTo(1);
+  g.push({k:'D',side:-1,x:teL?teL.x-OL_T*0.85:lt-OL_T*1.15});
+  g.push({k:'C',side:-1,x:teL?(lt+teL.x)/2:lt-OL_T*0.5});
+  g.push({k:'B',side:-1,x:(lg+lt)/2});
+  g.push({k:'A',side:-1,x:(c+lg)/2});
+  g.push({k:'A',side:1, x:(c+rg)/2});
+  g.push({k:'B',side:1, x:(rg+rt)/2});
+  g.push({k:'C',side:1, x:teR?(rt+teR.x)/2:rt+OL_T*0.5});
+  g.push({k:'D',side:1, x:teR?teR.x+OL_T*0.85:rt+OL_T*1.15});
+  return g;
+}
+// a coach says "playside B", not "the right B gap"
+function gapLabel(g){return (g.side===runDir?'playside ':'backside ')+g.k;}
+function nearestGapIndex(gaps,x){
+  var bi=0,bd=1e9;
+  gaps.forEach(function(g,i){var d=Math.abs(g.x-x);if(d<bd){bd=d;bi=i;}});
+  return bi;
+}
+var fitGroup=[];
+function fitMembers(){
+  return fitGroup.map(playerById).filter(function(p){return p&&p.color===D;})
+    .sort(function(a,b){return a.x-b.x;});
+}
+function autoTieThreeWay(){
+  var box=players.filter(function(p){return p.color===D&&isBacker(p);})
+    .sort(function(a,b){return Math.abs(a.x-ballX)-Math.abs(b.x-ballX);});
+  fitGroup=box.slice(0,3).map(function(p){return p.id;});
+  return fitGroup.length;
+}
+function toggleThreeWay(p){
+  if(!p||p.color!==D)return;
+  var i=fitGroup.indexOf(p.id);
+  if(i>=0)fitGroup.splice(i,1);
+  else{ if(fitGroup.length>=3)fitGroup.shift(); fitGroup.push(p.id); }
+}
+// where the sniffer ends up, expressed as a gap
+function snifferGapIndex(gaps){
+  var sn=snifferOf();if(!sn)return -1;
+  var ins=snifferInsert(sn);if(!ins)return -1;
+  if(!ins.inserting)return -1;
+  return nearestGapIndex(gaps,ins.x);
+}
+/* Returns [{p, gap, role, x, y}] — the resolved fit for each linked defender. */
+function resolveThreeWay(){
+  var mem=fitMembers();
+  if(mem.length<2)return [];
+  var gaps=frontGaps(),ig=snifferGapIndex(gaps),out=[];
+  var fitY=LOS-Math.round(0.2*YD_V);
+  if(ig<0){
+    // he stayed home: everybody plays the gap he is aligned over
+    mem.forEach(function(p){
+      var g=gaps[nearestGapIndex(gaps,p.x)];
+      out.push({p:p,gap:g,role:gapLabel(g),x:g.x,y:fitY});
+    });
+    return out;
+  }
+  // he inserted: the two nearest defenders fit that gap from both sides,
+  // and whoever is left takes the cutback behind it.
+  var order=mem.slice().sort(function(a,b){
+    return Math.abs(a.x-gaps[ig].x)-Math.abs(b.x-gaps[ig].x);
+  });
+  var inside=null,outside=null;
+  order.forEach(function(p){
+    var side=(p.x-gaps[ig].x);
+    if(Math.abs(gaps[ig].x-ballX)<1){ if(!inside)inside=p; else if(!outside)outside=p; return; }
+    var toBall=(gaps[ig].x-ballX)>=0?-1:1;      // "inside" means back toward the ball
+    if(side*toBall>0){ if(!inside)inside=p; }
+    else if(!outside)outside=p;
+  });
+  order.forEach(function(p){ if(p!==inside&&p!==outside&&!outside)outside=p; });
+  order.forEach(function(p){ if(p!==inside&&p!==outside&&!inside)inside=p; });
+  var third=order.filter(function(p){return p!==inside&&p!==outside;})[0]||null;
+  var gw=Math.max(OL_G*0.55,Math.round(0.9*YD));
+  if(inside)out.push({p:inside,gap:gaps[ig],role:'Spill '+gapLabel(gaps[ig]),
+    x:gaps[ig].x-((gaps[ig].x-ballX)>=0?1:-1)*gw*0.55,y:fitY});
+  if(outside)out.push({p:outside,gap:gaps[ig],role:'Box '+gapLabel(gaps[ig]),
+    x:gaps[ig].x+((gaps[ig].x-ballX)>=0?1:-1)*gw*0.55,y:fitY});
+  if(third){
+    // the cutback is the next gap back toward the other side of the ball
+    var bi=ig+((gaps[ig].x-ballX)>=0?-1:1);
+    bi=Math.max(0,Math.min(gaps.length-1,bi));
+    if(gaps[bi]===gaps[ig])bi=Math.max(0,Math.min(gaps.length-1,bi-1));
+    // the third man has the next gap over — a fill if the ball is going there,
+    // the cutback if it is behind the play
+    out.push({p:third,gap:gaps[bi],
+      role:(gaps[bi].side===runDir?'Fill ':'Cutback ')+gapLabel(gaps[bi]),
+      x:gaps[bi].x,y:fitY});
+  }
+  return out;
+}
+function applyThreeWay(){
+  var res=resolveThreeWay();
+  res.forEach(function(r){
+    clearForPhase(r.p.id,'run');
+    assigns.push({pid:r.p.id,phase:'run',kind:'run',role:r.role,
+      tx:Math.round(r.x),ty:Math.round(r.y),fit3:true});
+  });
+  return res.length;
+}
+
 // The sniffer adds a gap, so somebody owns it. Name the job so a coach can see it.
 function markSnifferFits(dir){
+  if(fitGroup.length>=2){applyThreeWay();return;}   // the tied group owns this
   var sn=snifferOf();if(!sn)return;
   var ins=snifferInsert(sn);
   var backers=players.filter(function(p){return p.color===D&&isBacker(p);});

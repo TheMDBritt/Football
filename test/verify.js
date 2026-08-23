@@ -772,5 +772,58 @@ w.resetAnim();
   w.ctx.arc=realArc;
 })();
 
+
+/* ---- three-way (bump) fit off the sniffer ---- */
+w.players=[]; w.loadForm("gun_2x2_yoff"); w.applyDefPers("base43"); w.applyFront("over");
+var gapsT=w.frontGaps();
+chk("the front is modelled as eight gaps", gapsT.length===8);
+chk("gaps are ordered inside-out from the ball",
+    Math.abs(gapsT[3].x-w.ballX)<Math.abs(gapsT[2].x-w.ballX) &&
+    Math.abs(gapsT[4].x-w.ballX)<Math.abs(gapsT[5].x-w.ballX));
+chk("three box defenders can be tied together", w.autoTieThreeWay()===3);
+
+function fitRoles(){
+  return w.assigns.filter(function(a){return a.fit3;})
+    .map(function(a){return w.playerById(a.pid).label+" "+a.role;});
+}
+w.runDir=1; w.applyRunPlay("inside_zone");
+chk("a tight end blocking the man over him leaves the base gaps alone",
+    fitRoles().length===3 && fitRoles().every(function(r){return /(playside|backside) [ABCD]$/.test(r);}),
+    fitRoles().join(" | "));
+
+w.applyRunPlay("split_zone");
+chk("when he inserts, that gap is fitted from both sides",
+    fitRoles().some(function(r){return /Spill/.test(r);}) &&
+    fitRoles().some(function(r){return /Box/.test(r);}), fitRoles().join(" | "));
+chk("and the third man takes the next gap over",
+    fitRoles().some(function(r){return /Cutback|Fill/.test(r);}));
+var spillT=w.assigns.filter(function(a){return /Spill/.test(a.role||"");})[0];
+var boxT=w.assigns.filter(function(a){return /Box /.test(a.role||"");})[0];
+chk("spill fits inside the gap, box fits outside it",
+    Math.abs(spillT.tx-w.ballX) < Math.abs(boxT.tx-w.ballX));
+chk("all three fit at the line rather than downfield",
+    w.assigns.filter(function(a){return a.fit3;})
+      .every(function(a){return Math.abs(a.ty-w.LOS)<w.YD_V*1.5;}));
+
+w.applyRunPlay("power");
+chk("a kick-out by the sniffer also bumps the fit",
+    fitRoles().some(function(r){return /Spill|Box/.test(r);}));
+
+w.applyRunPlay("split_zone");
+var memT=w.fitMembers(), landed=0;
+memT.forEach(function(p){
+  var a=w.assigns.filter(function(x){return x.pid===p.id&&x.fit3;})[0];
+  w.setAnim(1);
+  if(a&&Math.hypot(w.px(p)-a.tx,w.py(p)-a.ty)<w.YD*2.5)landed++;
+});
+chk("the simulation takes every tied defender to his gap", landed===memT.length, landed+"/"+memT.length);
+w.resetAnim();
+
+w.assigns=w.assigns.filter(function(a){return !a.fit3;}); w.fitGroup=[];
+w.applyRunPlay("split_zone");
+chk("untied, it falls back to the single sniffer fit",
+    w.assigns.filter(function(a){return a.fit3;}).length===0 &&
+    w.assigns.some(function(a){return /sniffer/i.test(a.role||"");}));
+
 console.log("\n" + (fails ? fails + " FAILURE(S)" : "ALL " + "CHECKS PASSED"));
 process.exit(fails ? 1 : 0);
