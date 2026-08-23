@@ -20,6 +20,18 @@ const w = dom.window;
 w.devicePixelRatio = 2;
 // the inline script captured `ctx` at parse time, so replace the binding itself
 w.ctx = createCanvas(1640, 1080).getContext("2d");
+// the export path builds offscreen canvases; jsdom has none, so hand it real ones
+const realCreate = w.document.createElement.bind(w.document);
+w.document.createElement = function (t) {
+  if (String(t).toLowerCase() === "canvas") {
+    const c = createCanvas(10, 10);
+    c.style = {}; c.setAttribute = function () {};
+    c.classList = { add() {}, remove() {}, toggle() {}, contains() { return false; } };
+    return c;
+  }
+  return realCreate(t);
+};
+w.C = w.document.getElementById("c");
 Object.defineProperty(w.document.getElementById("wrap"), "clientWidth", { value: 820 });
 
 let fails = 0;
@@ -265,6 +277,81 @@ chk("quiz hides the answer", /Reveal/.test(w.document.getElementById("assign-car
 w.quizOn=false; w.focusId=null; w.render();
 chk("the view picker lists all 22",
     w.document.getElementById("sel-player").querySelectorAll("option").length===23);
+
+
+/* ---- export, ids, PDF, platform ---- */
+w.players=[]; w.loadForm("gun_2x2"); w.applyFront("over"); w.applyCoverage("3");
+w.applyPassPlay("mesh");
+w.submitForm("new",null,"Mesh Right","Openers","","3rd, 6","Central");
+w.applyRunPlay("power");
+w.submitForm("new",null,"Power Right","Openers","","1st, 10","Central");
+var pl=w.getPlays();
+var mesh=pl.filter(function(p){return p.name==="Mesh Right";})[0];
+chk("saved plays get stable ids",
+    pl.every(function(p){return !!p.id;}) &&
+    new Set(pl.map(function(p){return p.id;})).size===pl.length);
+chk("down, distance and opponent are stored",
+    !!mesh && mesh.down==="3rd" && mesh.dist==="6" && mesh.opponent==="Central",
+    mesh && [mesh.down,mesh.dist,mesh.opponent].join("/"));
+
+var dupRec=JSON.parse(JSON.stringify(pl[0])); dupRec.id=w.newId();
+w.setPlays(pl.concat([dupRec]));
+var before=w.getPlays().length;
+w.confirm=function(){return true;};
+w.deletePlay(w.getPlays()[0]);
+chk("deleting by id removes exactly one record", w.getPlays().length===before-1);
+
+w.applyPassPlay("smash");
+var tg=w.autoTags();
+chk("auto-tags describe the call",
+    tg.some(function(t){return /pers/.test(t);}) && tg.indexOf("Smash")>=0 && tg.indexOf("pass")>=0, tg.join("|"));
+
+var blobbed=null;
+w.URL={createObjectURL:function(){return "blob:x";},revokeObjectURL:function(){}};
+w.Blob=function(parts,opts){this.parts=parts;this.type=opts&&opts.type;blobbed=this;};
+w.exportPlaybook();
+var payload=JSON.parse(blobbed.parts[0]);
+chk("export is versioned and carries every play",
+    payload.version===2 && payload.format==="coachs-play-designer" && payload.plays.length===w.getPlays().length);
+
+var mineBefore=w.getPlays().length;
+w.alert=function(){};
+w.FileReader=function(){this.readAsText=function(f){this.result=f._text;this.onload();}.bind(this);};
+w.importPlaybook({_text:JSON.stringify(payload)});
+chk("re-importing the same file is a no-op", w.getPlays().length===mineBefore);
+w.importPlaybook({_text:JSON.stringify({format:"coachs-play-designer",version:2,
+  plays:[Object.assign({},payload.plays[0],{id:"other-1"})]})});
+chk("a clashing name is renamed rather than overwritten",
+    w.getPlays().length===mineBefore+1 && w.getPlays().some(function(p){return /\(2\)$/.test(p.name);}));
+
+var pdf=w.buildPDF([{data:new Uint8Array([0xFF,0xD8,0xFF,0xD9]),w:100,h:80}],792,612);
+var pdfs=String.fromCharCode.apply(null,pdf.parts[0]);
+chk("PDF has header, catalog, page, image and trailer",
+    pdfs.indexOf("%PDF-1.4")===0 && /\/Type \/Catalog/.test(pdfs) &&
+    /DCTDecode/.test(pdfs) && /startxref/.test(pdfs) && /%%EOF/.test(pdfs));
+var sxp=pdfs.lastIndexOf("startxref");
+var xp=parseInt(pdfs.slice(sxp+9).trim(),10);
+chk("PDF xref offset lands on the xref table", pdfs.slice(xp,xp+4)==="xref");
+var xl=pdfs.slice(xp).split("\n"), xc=parseInt(xl[1].split(" ")[1],10), badOff=[];
+for(var xi=1;xi<xc;xi++){
+  var oo=parseInt(xl[2+xi].slice(0,10),10);
+  if(!new RegExp("^"+xi+" 0 obj").test(pdfs.slice(oo,oo+12)))badOff.push(xi);
+}
+chk("every PDF xref offset resolves to its object", badOff.length===0, badOff.join(","));
+
+var liveCount=w.players.length, liveBall=w.ballX;
+w.withPlay(w.getPlays()[0],function(){ w.players=[]; });
+chk("previewing a saved play does not corrupt the live document",
+    w.players.length===liveCount && w.ballX===liveBall);
+
+chk("canvas allows vertical panning by default", /touch-action:pan-y/.test(html));
+chk("touchmove ignores non-manipulating gestures", /touchmove[\s\S]{0,90}pointerBusy\(\)\)return/.test(html));
+chk("canvas is keyboard focusable", /id="c" tabindex="0"/.test(html));
+chk("service worker and manifest are wired", /register\(.sw\.js.\)/.test(html) && /rel="manifest"/.test(html));
+chk("offline shell files exist",
+    fs.existsSync(path.join(ROOT,"playdesigner/sw.js")) &&
+    fs.existsSync(path.join(ROOT,"playdesigner/manifest.webmanifest")));
+chk("print stylesheet present", /@media print/.test(html));
 
 console.log("\n" + (fails ? fails + " FAILURE(S)" : "ALL " + "CHECKS PASSED"));
 process.exit(fails ? 1 : 0);

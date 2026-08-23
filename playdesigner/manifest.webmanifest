@@ -1,0 +1,14 @@
+{
+  "name": "Coach's Play Designer",
+  "short_name": "Play Designer",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "landscape",
+  "background_color": "#ffffff",
+  "theme_color": "#14804a",
+  "description": "Diagram formations, run and pass concepts, fronts and coverages, and print scout cards.",
+  "icons": [
+    { "src": "icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any maskable" }
+  ]
+}
