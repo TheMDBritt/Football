@@ -594,5 +594,31 @@ chk("the snap can be exported as video", typeof w.exportVideo==="function");
 w.exportVideo();
 chk("video export degrades cleanly where recording is unavailable", true);
 
+
+/* ---- the throw ---- */
+w.players=[]; w.loadForm("gun_2x2"); w.applyDefPers("nickel");
+w.applyFront("over"); w.applyCoverage("3"); w.applyPassPlay("smash");
+var tpB=w.throwPlan();
+chk("the app decides where the ball goes", !!tpB && !!tpB.to);
+chk("the target is one of the quarterback reads",
+    w.assigns.some(function(a){return a.kind==="progression"&&a.pid===tpB.to.id;}));
+var qbB=w.players.find(function(p){return p.color===w.Q;});
+w.setAnim(0.3);
+var bb=w.animBallPos(0.3);
+chk("before the throw the quarterback still has it",
+    bb && bb.held && !bb.flying && Math.hypot(bb.x-w.px(qbB),bb.y-w.py(qbB))<w.YD);
+w.setAnim(0.72); bb=w.animBallPos(0.72);
+chk("mid-flight the ball has left his hand",
+    bb && bb.flying && Math.hypot(bb.x-w.px(qbB),bb.y-w.py(qbB))>w.YD);
+w.setAnim(1); bb=w.animBallPos(1);
+chk("it arrives with the receiver",
+    bb && bb.caught && Math.hypot(bb.x-w.px(tpB.to),bb.y-w.py(tpB.to))<w.YD*0.6);
+w.applyRunPlay("power"); w.setAnim(0.8);
+var carrierB=w.playerById(w.assigns.find(function(a){return a.kind==="carry"&&!a.fake;}).pid);
+bb=w.animBallPos(0.8);
+chk("on a run the ball rides with the carrier",
+    bb && Math.hypot(bb.x-w.px(carrierB),bb.y-w.py(carrierB))<w.YD*0.5);
+w.resetAnim();
+
 console.log("\n" + (fails ? fails + " FAILURE(S)" : "ALL " + "CHECKS PASSED"));
 process.exit(fails ? 1 : 0);

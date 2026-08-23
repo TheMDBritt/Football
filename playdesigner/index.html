@@ -628,6 +628,18 @@ function paintField(){
   ctx.beginPath();ctx.moveTo(2,0);ctx.lineTo(2,H);ctx.stroke();
   ctx.beginPath();ctx.moveTo(W-2,0);ctx.lineTo(W-2,H);ctx.stroke();
 }
+function drawBallAt(bx,by,scale){
+  var r=R()*0.62*(scale||1);
+  ctx.save();ctx.translate(bx,by);
+  ctx.shadowColor='rgba(0,0,0,0.5)';ctx.shadowBlur=6;
+  ctx.fillStyle='#7a4a24';ctx.strokeStyle='#2b1a0c';ctx.lineWidth=1.6;
+  ctx.beginPath();ctx.ellipse(0,0,r,r*0.62,0,0,Math.PI*2);ctx.fill();ctx.stroke();
+  ctx.shadowColor='transparent';
+  ctx.strokeStyle='#fff';ctx.lineWidth=1.3;
+  ctx.beginPath();ctx.moveTo(-r*0.45,0);ctx.lineTo(r*0.45,0);ctx.stroke();
+  for(var i=-1;i<=1;i++){ctx.beginPath();ctx.moveTo(i*r*0.22,-r*0.27);ctx.lineTo(i*r*0.22,r*0.27);ctx.stroke();}
+  ctx.restore();
+}
 function drawBall(){
   var rx=Math.max(7,Math.round(W/95)),ry=Math.max(4,Math.round(W/150));
   ctx.save();
@@ -763,7 +775,18 @@ function render(){
       ctx.restore();
     });
   }
-  if(!boxView)drawBall();
+  if(!boxView){
+    var bp=animBallPos(animT);
+    if(bp){
+      if(bp.flying){
+        ctx.save();ctx.setLineDash([6,5]);ctx.lineWidth=2;
+        ctx.strokeStyle='rgba(255,255,255,0.55)';
+        ctx.beginPath();ctx.moveTo(bp.from.x,bp.from.y);ctx.lineTo(bp.x,bp.y);ctx.stroke();
+        ctx.restore();
+      }
+      drawBallAt(bp.x,bp.y,bp.flying?1.25:1);
+    }else drawBall();
+  }
   ctx.restore();
   if(recording)drawRecBanner();
   callStrip();refreshPassMenu();fillPlayerSelect();renderCard();
@@ -4117,6 +4140,42 @@ function matchPlan(){
     }
   });
   return plan;
+}
+/* ---- the throw: who gets it, and when it leaves ---- */
+function throwPlan(){
+  if(play!=='pass')return null;
+  var qb=qbOf();if(!qb)return null;
+  var prog=assigns.filter(function(a){return a.kind==='progression';})
+    .sort(function(a,b){return (+a.role)-(+b.role);});
+  if(!prog.length)return null;
+  // throw to the read that is actually open, falling back to the first read
+  var sep={};separationTable().forEach(function(r){sep[r.rec]=r.sep;});
+  var pick=null,pickSep=-1;
+  prog.forEach(function(a,i){
+    var r=playerById(a.pid);if(!r)return;
+    var sc=(sep[r.label]==null?0:sep[r.label])-i*0.6;   // earlier reads get the benefit
+    if(sc>pickSep){pickSep=sc;pick=r;}
+  });
+  if(!pick)pick=playerById(prog[0].pid);
+  if(!pick)return null;
+  return {from:qb,to:pick,t0:0.58,t1:0.88};
+}
+function animBallPos(t){
+  if(animT==null)return null;
+  if(play==='run'){
+    var c=null;assigns.forEach(function(a){if(a.kind==='carry'&&!a.fake&&!c)c=a;});
+    if(!c)return null;
+    var cp=playerById(c.pid);
+    return cp?{x:px(cp),y:py(cp),held:true}:null;
+  }
+  var tp=throwPlan();if(!tp)return null;
+  var hold={x:px(tp.from),y:py(tp.from)};
+  if(t<tp.t0)return {x:hold.x,y:hold.y,held:true};
+  var land={x:px(tp.to),y:py(tp.to)};
+  if(t>=tp.t1)return {x:land.x,y:land.y,held:true,caught:true};
+  var u=(t-tp.t0)/(tp.t1-tp.t0);
+  return {x:hold.x+(land.x-hold.x)*u,y:hold.y+(land.y-hold.y)*u,
+          from:hold,to:land,flying:true};
 }
 function matchPos(d,rec,mode,cush,basePos,recPos){
   var cu=cush*YD_V*0.5;
