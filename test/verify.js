@@ -620,5 +620,71 @@ chk("on a run the ball rides with the carrier",
     bb && Math.hypot(bb.x-w.px(carrierB),bb.y-w.py(carrierB))<w.YD*0.5);
 w.resetAnim();
 
+
+/* ---- zone shells sit on field landmarks, and play deep to short ---- */
+function ydz(y){ return Math.round((w.LOS-y)/w.YD_V*10)/10; }
+function posT(p,t){ w.setAnim(t); return {x:w.px(p),y:w.py(p)}; }
+w.players=[]; w.loadForm("gun_2x2"); w.applyDefPers("nickel"); w.applyFront("over");
+
+w.applyCoverage("3");
+chk("cover 3 rolls the strong safety down to a curl/flat",
+    ydz(w.players.find(function(p){return p.label==="SS";}).y) < 8);
+chk("cover 3 keeps a safety in the middle of the field",
+    Math.abs(w.players.find(function(p){return p.label==="FS";}).x - w.W/2) < w.YD*4);
+var thirdsT=w.assigns.filter(function(a){return a.role==="Deep ⅓";})
+  .map(function(a){return a.tx;}).sort(function(a,b){return a-b;});
+chk("cover 3 splits the field into three, not the formation",
+    thirdsT.length===3 && Math.abs(thirdsT[0]-w.W/6)<w.YD*2 &&
+    Math.abs(thirdsT[2]-(w.W-w.W/6))<w.YD*2);
+
+w.applyCoverage("2");
+var halvesT=w.assigns.filter(function(a){return a.role==="Deep ½";})
+  .map(function(a){return a.tx;}).sort(function(a,b){return a-b;});
+chk("cover 2 safeties actually split halves", halvesT.length===2 && (halvesT[1]-halvesT[0])>w.W*0.35);
+chk("cover 2 corners sit down at five",
+    ydz(w.players.find(function(p){return p.label==="CB";}).y) <= 6);
+
+w.applyCoverage("4");
+var qT=w.assigns.filter(function(a){return a.role==="Deep ¼";})
+  .map(function(a){return a.tx;}).sort(function(a,b){return a-b;});
+chk("quarters divides the field into four",
+    qT.length===4 && (qT[3]-qT[0])>w.W*0.6 && (qT[2]-qT[1])>w.W*0.15);
+chk("quarters safeties are not stacked on the ball",
+    Math.abs(w.players.find(function(p){return p.label==="FS";}).x-w.ballX) > w.YD*5);
+
+w.applyCoverage("3"); w.applyPassPlay("four_verts");
+var cbZ=w.players.filter(function(p){return p.color===w.D&&p.label==="CB";})
+  .sort(function(a,b){return a.x-b.x;})[0];
+var x1Z=w.sideStack(-1)[0], onTop=true, revs=0, prevY=posT(cbZ,0.1).y;
+for(var tz=0.1;tz<=1.001;tz+=0.1){
+  var dz=posT(cbZ,tz), rz=posT(x1Z,tz);
+  if((rz.y-dz.y)/w.YD_V < -0.5) onTop=false;
+  if(tz>0.1 && dz.y > prevY+3) revs++;
+  prevY=dz.y;
+}
+chk("a deep corner never lets his man behind him", onTop);
+chk("a deep defender bails instead of jumping down and going back", revs===0, revs+" reversals");
+
+w.applyPassPlay("mesh");
+var cbM=w.players.filter(function(p){return p.color===w.D&&p.label==="CB";})
+  .sort(function(a,b){return a.x-b.x;})[0];
+var startM=posT(cbM,0.15).y;
+chk("a shallow crosser does not pull a deep defender down", posT(cbM,1).y <= startM+2);
+w.resetAnim();
+
+/* ---- a concept never leaves a receiver standing ---- */
+var stranded=0;
+["gun_2x2","gun_3x1","gun_bunch","gun_empty","i_form","ace_trips"].forEach(function(f){
+  w.players=[]; w.loadForm(f); w.applyDefPers("nickel"); w.applyFront("over"); w.applyCoverage("3");
+  Object.keys(w.PASSPLAY).forEach(function(k){
+    w.applyPassPlay(k);
+    stranded += w.eligibles().filter(function(p){
+      return !w.routes.some(function(r){return r.type==="tree"&&r.pid===p.id;}) &&
+             !w.assigns.some(function(a){return a.pid===p.id&&(a.kind==="block"||a.kind==="carry");});
+    }).length;
+  });
+});
+chk("every eligible has a job on every concept in every formation", stranded===0, stranded+" left standing");
+
 console.log("\n" + (fails ? fails + " FAILURE(S)" : "ALL " + "CHECKS PASSED"));
 process.exit(fails ? 1 : 0);

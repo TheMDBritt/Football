@@ -2460,6 +2460,16 @@ function applyCoverage(scheme,internal){
   var fs=defByLabel('FS')[0],ss=defByLabel('SS')[0],mike=defByLabel('MIKE')[0],will=defByLabel('WILL')[0],nick=defByLabel('NICK')[0];
   function P(p,x,y){if(p){p.x=Math.round(x);p.y=Math.round(y);}}
   var deepY=LOS-Math.round(14*YD_V),offY=LOS-Math.round(7*YD_V),uy=LOS-Math.round(5*YD_V),midY=LOS-Math.round(10*YD_V);
+  // A deep zone is a slice of the FIELD. Anchoring it to the receiver split made the
+  // shell shrink and grow with the formation, which is not how any of this works.
+  var MOF=Math.round(W/2);
+  var THIRD_L=Math.round(W/6),THIRD_R=W-Math.round(W/6);
+  var HALF_L=Math.round(W*0.26),HALF_R=W-Math.round(W*0.26);
+  var QO_L=Math.round(W*0.12),QI_L=Math.round(W*0.375),QI_R=W-Math.round(W*0.375),QO_R=W-Math.round(W*0.12);
+  var Y_DEEP=LOS-Math.round(14*YD_V),Y_QTR=LOS-Math.round(12*YD_V);
+  var Y_UND=LOS-Math.round(6*YD_V),Y_ROB=LOS-Math.round(9*YD_V);
+  var A_SAF=LOS-Math.round(13*YD_V),A_SAFQ=LOS-Math.round(11*YD_V);
+  var A_APEX=LOS-Math.round(5*YD_V),A_PRESS=LOS-Math.round(5*YD_V);
   var cbBase={'2':7,'3':10,'4':8,'palm':8,'6':8,'2man':5,'ripliz':10}[scheme]||7;
   var sg=cbBase>=7?1.5:(cbBase>=3?1:0.5);
   var bD=Math.max(1,cbBase-sg),fD=cbBase+sg;
@@ -2469,34 +2479,54 @@ function applyCoverage(scheme,internal){
   var clL=loX+Math.round(span*0.16),clR=hiX-Math.round(span*0.16),strongCl=strong>0?clR:clL,weakCl=strong>0?clL:clR;
   var bxL=ballX-Math.round(span*0.13),bxR=ballX+Math.round(span*0.13);
   if(scheme==='3'){
+    // three deep, four under. The strong safety rolls down to a curl/flat — "sky".
     P(cbs[0],loX,cbL);P(cbs[1],hiX,cbR);
-    P(fs,ballX-strong*Math.round(span*0.22),deepY);
-    P(ss,ballX+strong*Math.round(span*0.22),deepY);
-    P(nick,strongCl,uy);P(will,bxL,uy);P(mike,bxR,uy);
-    setCov(cbs[0],'Deep ⅓',dR,dRy,loX,deepY);setCov(fs,'Deep ⅓',dR,dRy,ballX,deepY);setCov(cbs[1],'Deep ⅓',dR,dRy,hiX,deepY);
-    setCov(nick,'Curl/Flat',uR,uRy);setCov(ss,'Curl/Flat',uR,uRy,weakCl,uy);setCov(will,'Hook',uR,uRy);setCov(mike,'Hook',uR,uRy);
+    P(fs,MOF+strong*Math.round(1.5*YD),A_SAF);
+    setCov(cbs[0],'Deep ⅓',dR,dRy,THIRD_L,Y_DEEP);
+    setCov(fs,'Deep ⅓',dR,dRy,MOF,Y_DEEP);
+    setCov(cbs[1],'Deep ⅓',dR,dRy,THIRD_R,Y_DEEP);
+    P(nick,strongCl,A_APEX);P(ss,weakCl,A_APEX);
+    P(will,bxL,A_APEX);P(mike,bxR,A_APEX);
+    setCov(nick,'Curl/Flat',uR,uRy,strongCl,Y_UND);
+    setCov(ss,'Curl/Flat',uR,uRy,weakCl,Y_UND);
+    setCov(will,'Hook',uR,uRy,bxL,Y_UND);
+    setCov(mike,'Hook',uR,uRy,bxR,Y_UND);
   }else if(scheme==='2'){
-    P(cbs[0],loX,cbL);P(cbs[1],hiX,cbR);
-    P(fs,ballX-Math.round(span*0.26),deepY);P(ss,ballX+Math.round(span*0.26),deepY);
-    P(nick,strongCl,uy);P(will,weakCl,uy);P(mike,ballX,midY);
-    setCov(cbs[0],'Flat',uR,uRy);setCov(cbs[1],'Flat',uR,uRy);
-    setCov(fs,'Deep ½',hR,dRy);setCov(ss,'Deep ½',hR,dRy);
-    setCov(nick,'Hook',uR,uRy);setCov(will,'Hook',uR,uRy);
-    setCov(mike,'Deep Mid',Math.round(W*0.085),Math.round(4*YD_V));
+    // two halves, five under. Corners jam and sink; Mike runs the middle (Tampa).
+    P(cbs[0],loX,A_PRESS);P(cbs[1],hiX,A_PRESS);
+    setCov(cbs[0],'Flat',uR,uRy,loX,LOS-Math.round(5*YD_V));
+    setCov(cbs[1],'Flat',uR,uRy,hiX,LOS-Math.round(5*YD_V));
+    P(fs,HALF_L,A_SAF);P(ss,HALF_R,A_SAF);
+    setCov(fs,'Deep ½',hR,dRy,HALF_L,Y_DEEP);
+    setCov(ss,'Deep ½',hR,dRy,HALF_R,Y_DEEP);
+    P(nick,strongCl,A_APEX);P(will,weakCl,A_APEX);P(mike,ballX,A_APEX);
+    setCov(nick,'Hook',uR,uRy,strongCl,Y_UND);
+    setCov(will,'Hook',uR,uRy,weakCl,Y_UND);
+    setCov(mike,'Deep Mid',Math.round(W*0.085),Math.round(4*YD_V),MOF,LOS-Math.round(12*YD_V));
   }else if(scheme==='4'){
+    // four quarters. Corners take the outside quarters, safeties the inside ones.
     P(cbs[0],loX,cbL);P(cbs[1],hiX,cbR);
-    P(fs,ballX-Math.round(span*0.2),deepY);P(ss,ballX+Math.round(span*0.2),deepY);
-    P(nick,strongCl,uy);P(will,weakCl,uy);P(mike,ballX,uy);
-    setCov(cbs[0],'Deep ¼',qR,dRy,loX,deepY);setCov(cbs[1],'Deep ¼',qR,dRy,hiX,deepY);
-    setCov(fs,'Deep ¼',qR,dRy);setCov(ss,'Deep ¼',qR,dRy);
-    setCov(nick,'Quarter Flat',uR,uRy);setCov(will,'Quarter Flat',uR,uRy);setCov(mike,'Hook',uR,uRy);
+    setCov(cbs[0],'Deep ¼',qR,dRy,QO_L,Y_QTR);
+    setCov(cbs[1],'Deep ¼',qR,dRy,QO_R,Y_QTR);
+    P(fs,QI_L,A_SAFQ);P(ss,QI_R,A_SAFQ);
+    setCov(fs,'Deep ¼',qR,dRy,QI_L,Y_QTR);
+    setCov(ss,'Deep ¼',qR,dRy,QI_R,Y_QTR);
+    P(nick,strongCl,A_APEX);P(will,weakCl,A_APEX);P(mike,ballX,A_APEX);
+    setCov(nick,'Quarter Flat',uR,uRy,strongCl,Y_UND);
+    setCov(will,'Quarter Flat',uR,uRy,weakCl,Y_UND);
+    setCov(mike,'Hook',uR,uRy,ballX,Y_UND);
   }else if(scheme==='palm'){
-    P(cbs[0],loX,cbL);P(cbs[1],hiX,cbR);
-    P(fs,ballX-Math.round(span*0.2),deepY);P(ss,ballX+Math.round(span*0.2),deepY);
-    P(nick,strongCl,uy);P(will,weakCl,uy);P(mike,ballX,uy);
-    setCov(cbs[0],'Deep ¼',qR,dRy,loX,deepY);setCov(cbs[1],'Deep ¼',qR,dRy,hiX,deepY);
-    setCov(fs,'Deep ¼',qR,dRy);setCov(ss,'Deep ¼',qR,dRy);
-    setCov(nick,'Wall 2',uR,uRy);setCov(will,'Hook/Curl',uR,uRy);setCov(mike,'Match 3',uR,uRy);
+    // quarters shell, but the corners sit closer because they are reading #2
+    P(cbs[0],loX,LOS-Math.round(6*YD_V));P(cbs[1],hiX,LOS-Math.round(6*YD_V));
+    setCov(cbs[0],'Deep ¼',qR,dRy,QO_L,Y_QTR);
+    setCov(cbs[1],'Deep ¼',qR,dRy,QO_R,Y_QTR);
+    P(fs,QI_L,A_SAFQ);P(ss,QI_R,A_SAFQ);
+    setCov(fs,'Deep ¼',qR,dRy,QI_L,Y_QTR);
+    setCov(ss,'Deep ¼',qR,dRy,QI_R,Y_QTR);
+    P(nick,strongCl,A_APEX);P(will,weakCl,A_APEX);P(mike,ballX,A_APEX);
+    setCov(nick,'Wall 2',uR,uRy,strongCl,Y_UND);
+    setCov(will,'Hook/Curl',uR,uRy,weakCl,Y_UND);
+    setCov(mike,'Match 3',uR,uRy,ballX,Y_UND);
   }else if(scheme==='6'){
     // Quarter-quarter-half: field plays Quarters, boundary plays Cover 2
     var fS=ballX<W/2?1:-1,fCl=fS>0?clR:clL;
@@ -3314,6 +3344,21 @@ var PASSPLAY={
     progression([S[0],S[1]||S[0],W2[0]]); hotMark(bk);
   }
 };
+// A concept names two or three receivers. Everyone else still has to run something,
+// so give the leftovers a route that complements the call instead of nothing.
+function fillRoutes(){
+  eligibles().forEach(function(p){
+    var has=routes.some(function(r){return r.type==='tree'&&r.pid===p.id;});
+    if(has)return;
+    var busy=assigns.some(function(a){return a.pid===p.id&&(a.kind==='block'||a.kind==='carry');});
+    if(busy)return;
+    if(p.y>LOS+Math.round(3*YD_V)){setRoute(p,'Flat',1);return;}   // a back checks down
+    var st=sideStack((p.x-ballX)>=0?1:-1),i=st.indexOf(p);
+    if(i<=0)setRoute(p,'Comeback',12);        // backside outside: work back to the ball
+    else if(i===1)setRoute(p,'Seam',14);      // #2 runs by
+    else setRoute(p,'Drag',3);                // #3 crosses underneath
+  });
+}
 var curPass='';
 function applyPassPlay(key){
   if(!key||!PASSPLAY[key])return;
@@ -3322,6 +3367,7 @@ function applyPassPlay(key){
   play='pass';document.getElementById('sel-play').value='pass';
   var d=frontDir()||1;
   PASSPLAY[key](d);
+  fillRoutes();
   slideProtect(d);
   curPass=key;render();
 }
@@ -3420,30 +3466,51 @@ function animPositions(t){
     var rNow=rPath?posAt(rPath,Math.max(0,localT(rec,t)-0.10)):base[rec.id];
     if(!rNow)return;
     var q=matchPos(d,rec,m.mode,m.cush,{d:base[d.id],r:base[rec.id]},rNow);
+    if(m.deep){
+      // deep responsibility: never level with him, never underneath him —
+      // and never shallower than where he lined up, so he bails instead of yo-yoing
+      var capY=rNow.y-Math.round(2.2*YD_V);
+      if(q.y>capY)q.y=capY;
+      if(q.y>base[d.id].y)q.y=base[d.id].y;
+    }
     // ease off the alignment into the match so nobody snaps into place
     var k=Math.min(1,t/0.35);
     pos[d.id]={x:base[d.id].x+(q.x-base[d.id].x)*k,y:base[d.id].y+(q.y-base[d.id].y)*k};
     matched[d.id]=1;
   });
-  // zone defenders with no match rule sink to their landmark, then break on a threat
+  // Zone players work deep to short. A deep defender gets on top and stays there —
+  // he never comes down for an underneath route. An underneath defender sinks to his
+  // landmark and works to the threat, but stays beneath him.
   assigns.forEach(function(a){
     if(play==='run')return;                 // on a run they are fitting, not dropping
     if(a.kind!=='cover'||a.shape!=='circle')return;
     var d=playerById(a.pid);if(!d||matched[d.id])return;
-    var drop=posAt([base[d.id],{x:a.tx,y:a.ty}],Math.min(1,t/0.55));
-    if(t>0.55){
-      var rx=a.rx||Math.round(W*0.08),ry=a.ry||Math.round(4.5*YD_V),near=null,nd=1e9;
-      players.forEach(function(o){
-        if(o.color===D||isOL(o))return;
-        var q=pos[o.id];if(!q)return;
-        var dx=(q.x-a.tx)/rx,dy=(q.y-a.ty)/ry;
-        if(dx*dx+dy*dy>1.15)return;                 // not in this zone
-        var dist=Math.hypot(q.x-drop.x,q.y-drop.y);
-        if(dist<nd){nd=dist;near=q;}
-      });
-      if(near){
-        var k=Math.min(1,(t-0.55)/0.45)*0.7;        // close, but do not teleport
-        drop={x:drop.x+(near.x-drop.x)*k,y:drop.y+(near.y-drop.y)*k};
+    var deep=isDeepRole(a.role);
+    var land={x:a.tx,y:a.ty};
+    var drop=posAt([base[d.id],land],Math.min(1,t/(deep?0.66:0.48)));
+    var rx=a.rx||Math.round(W*0.08),ry=a.ry||Math.round(4.5*YD_V);
+    // the man who matters in a zone is the DEEPEST one in it, not the nearest
+    var thr=null;
+    players.forEach(function(o){
+      if(o.color===D||isOL(o)||o.color===Q)return;
+      var q=pos[o.id];if(!q)return;
+      var dx=(q.x-land.x)/rx,dy=(q.y-land.y)/ry;
+      if(dx*dx+dy*dy>1.3)return;
+      if(!thr||q.y<thr.y)thr=q;             // smaller y is further downfield
+    });
+    if(thr){
+      var k=Math.min(1,Math.max(0,t-0.28)/0.55)*(deep?0.5:0.75);
+      drop.x=drop.x+(thr.x-drop.x)*k;       // widen or squeeze to him
+      if(deep){
+        // stay on top of him. never level, never underneath.
+        var cap=thr.y-Math.round(2.2*YD_V);
+        if(drop.y>cap)drop.y=cap;
+      }else{
+        drop.y=drop.y+(thr.y-drop.y)*k;
+        var floor=thr.y+Math.round(1.5*YD_V);
+        if(drop.y<floor)drop.y=floor;       // stay underneath him
+        var ceil=land.y-Math.round(1.5*YD_V);
+        if(drop.y<ceil)drop.y=ceil;         // and never sink past your own landmark
       }
     }
     pos[d.id]=drop;
@@ -4123,43 +4190,44 @@ function matchPlan(){
     var hook=defByCover(/Hook|Wall|Match 3|Seam/,dir,false);
     var c2=relClass(two||one);
     if(cov==='3'||cov==='ripliz'){
-      // corner matches #1 vertical; curl/flat carries #2 vertical, otherwise sinks to the curl
-      if(cb)plan[cb.id]={rec:one,mode:'trail',cush:3};
+      // The corner only matches #1 if #1 threatens him deep. On anything short he
+      // stays in the third and passes it off — that is the whole point of the call.
+      if(cb&&relClass(one)==='vertical')plan[cb.id]={rec:one,mode:'trail',cush:3,deep:true};
       if(apex&&two)plan[apex.id]=(c2==='vertical')?{rec:two,mode:'trail',cush:2.5}
                                                   :{rec:two,mode:'flat',cush:3};
       if(hook&&(three||two))plan[hook.id]={rec:three||two,mode:'wall',cush:2.5};
     }else if(cov==='4'){
       // safeties read #2: vertical means man him, anything else means rob #1
       if(two&&c2==='vertical'){
-        if(saf)plan[saf.id]={rec:two,mode:'trail',cush:2.5};
-        if(cb)plan[cb.id]={rec:one,mode:'trail',cush:3};
+        if(saf)plan[saf.id]={rec:two,mode:'trail',cush:2.5,deep:true};
+        if(cb&&relClass(one)==='vertical')plan[cb.id]={rec:one,mode:'trail',cush:3,deep:true};
       }else{
-        if(saf)plan[saf.id]={rec:one,mode:'rob',cush:3};
-        if(cb)plan[cb.id]={rec:one,mode:'trail',cush:3.5};
+        if(saf)plan[saf.id]={rec:one,mode:'rob',cush:3,deep:true};
+        if(cb&&relClass(one)==='vertical')plan[cb.id]={rec:one,mode:'trail',cush:3.5,deep:true};
         if(apex&&two)plan[apex.id]={rec:two,mode:'trail',cush:2};
       }
     }else if(cov==='palm'){
       // palms: #2 out and the corner jumps him while the safety takes #1
       if(two&&c2==='out'){
-        if(cb)plan[cb.id]={rec:two,mode:'trail',cush:1.5};
-        if(saf)plan[saf.id]={rec:one,mode:'trail',cush:2.5};
+        if(cb)plan[cb.id]={rec:two,mode:'trail',cush:1.5};      // he jumps it, so he is underneath
+        if(saf)plan[saf.id]={rec:one,mode:'trail',cush:2.5,deep:true};
       }else{
-        if(cb)plan[cb.id]={rec:one,mode:'trail',cush:3};
-        if(saf&&two)plan[saf.id]={rec:two,mode:'trail',cush:2.5};
+        if(cb)plan[cb.id]={rec:one,mode:'trail',cush:3,deep:true};
+        if(saf&&two)plan[saf.id]={rec:two,mode:'trail',cush:2.5,deep:true};
       }
     }else if(cov==='2'){
       if(cb)plan[cb.id]={rec:one,mode:'flat',cush:3};
-      if(saf)plan[saf.id]={rec:(relClass(one)==='vertical')?one:(two||one),mode:'rob',cush:4};
+      if(saf)plan[saf.id]={rec:(relClass(one)==='vertical')?one:(two||one),mode:'rob',cush:4,deep:true};
       if(hook&&three)plan[hook.id]={rec:three,mode:'wall',cush:2};
     }else if(cov==='6'){
       // quarters to the field, cover 2 to the boundary
       var field=(ballX<W/2)?1:-1;
       if(dir===field){
-        if(two&&c2==='vertical'&&saf)plan[saf.id]={rec:two,mode:'trail',cush:2.5};
-        if(cb)plan[cb.id]={rec:one,mode:'trail',cush:3};
+        if(two&&c2==='vertical'&&saf)plan[saf.id]={rec:two,mode:'trail',cush:2.5,deep:true};
+        if(cb&&relClass(one)==='vertical')plan[cb.id]={rec:one,mode:'trail',cush:3,deep:true};
       }else{
         if(cb)plan[cb.id]={rec:one,mode:'flat',cush:3};
-        if(saf)plan[saf.id]={rec:one,mode:'rob',cush:4};
+        if(saf)plan[saf.id]={rec:one,mode:'rob',cush:4,deep:true};
       }
     }
   });
