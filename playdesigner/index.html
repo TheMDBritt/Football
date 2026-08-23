@@ -4525,51 +4525,58 @@ function snifferGapIndex(gaps){
   if(!ins.inserting)return -1;
   return nearestGapIndex(gaps,ins.x);
 }
-/* Returns [{p, gap, role, x, y}] — the resolved fit for each linked defender. */
+/* The three linked defenders own A, B and the edge. They do not hold those gaps —
+   they TRACK the sniffer, and the chain rotates so wherever he inserts is fitted from
+   both sides while whoever is left covers what he vacated.
+
+     he stays front side      inner A     middle B     edge D
+     he inserts in A          inner spills A, EDGE comes down and boxes A, middle unaffected
+     he inserts in B          inner spills B, middle boxes B, edge rotates inside to A
+     he gets all the way out  middle becomes the force at D, inner bumps to B,
+                              and the edge he just arced squeezes back inside to B          */
 function resolveThreeWay(){
   var mem=fitMembers();
   if(mem.length<2)return [];
-  var gaps=frontGaps(),ig=snifferGapIndex(gaps),out=[];
+  var gaps=frontGaps(),out=[];
   var fitY=LOS-Math.round(0.2*YD_V);
-  if(ig<0){
-    // he stayed home: everybody plays the gap he is aligned over
-    mem.forEach(function(p){
-      var g=gaps[nearestGapIndex(gaps,p.x)];
-      out.push({p:p,gap:g,role:gapLabel(g),x:g.x,y:fitY});
-    });
+  var sn=snifferOf(),ins=sn?snifferInsert(sn):null;
+  var inserting=!!(ins&&ins.inserting);
+  var side=inserting?((ins.x-ballX)>=0?1:-1):runDir;
+  function gapOn(k,sd){
+    for(var i=0;i<gaps.length;i++)if(gaps[i].k===k&&gaps[i].side===sd)return gaps[i];
+    return gaps[nearestGapIndex(gaps,ballX+sd*OL_G)];
+  }
+  // slots by alignment: nearest the ball is the inside man, widest is the edge
+  var order=mem.slice().sort(function(a,b){return Math.abs(a.x-ballX)-Math.abs(b.x-ballX);});
+  var inner=order[0],middle=order[1]||order[0],edge=order[2]||order[order.length-1];
+  var gw=Math.max(OL_G*0.55,Math.round(0.9*YD));
+  function put(p,g,role,off){
+    if(!p||!g)return;
+    var io=(g.x-ballX)>=0?1:-1;
+    out.push({p:p,gap:g,role:role,x:g.x+(off||0)*io*gw*0.55,y:fitY});
+  }
+  if(!inserting){
+    put(inner ,gapOn('A',side),gapLabel(gapOn('A',side)));
+    put(middle,gapOn('B',side),gapLabel(gapOn('B',side)));
+    put(edge  ,gapOn('D',side),gapLabel(gapOn('D',side)));
     return out;
   }
-  // he inserted: the two nearest defenders fit that gap from both sides,
-  // and whoever is left takes the cutback behind it.
-  var order=mem.slice().sort(function(a,b){
-    return Math.abs(a.x-gaps[ig].x)-Math.abs(b.x-gaps[ig].x);
-  });
-  var inside=null,outside=null;
-  order.forEach(function(p){
-    var side=(p.x-gaps[ig].x);
-    if(Math.abs(gaps[ig].x-ballX)<1){ if(!inside)inside=p; else if(!outside)outside=p; return; }
-    var toBall=(gaps[ig].x-ballX)>=0?-1:1;      // "inside" means back toward the ball
-    if(side*toBall>0){ if(!inside)inside=p; }
-    else if(!outside)outside=p;
-  });
-  order.forEach(function(p){ if(p!==inside&&p!==outside&&!outside)outside=p; });
-  order.forEach(function(p){ if(p!==inside&&p!==outside&&!inside)inside=p; });
-  var third=order.filter(function(p){return p!==inside&&p!==outside;})[0]||null;
-  var gw=Math.max(OL_G*0.55,Math.round(0.9*YD));
-  if(inside)out.push({p:inside,gap:gaps[ig],role:'Spill '+gapLabel(gaps[ig]),
-    x:gaps[ig].x-((gaps[ig].x-ballX)>=0?1:-1)*gw*0.55,y:fitY});
-  if(outside)out.push({p:outside,gap:gaps[ig],role:'Box '+gapLabel(gaps[ig]),
-    x:gaps[ig].x+((gaps[ig].x-ballX)>=0?1:-1)*gw*0.55,y:fitY});
-  if(third){
-    // the cutback is the next gap back toward the other side of the ball
-    var bi=ig+((gaps[ig].x-ballX)>=0?-1:1);
-    bi=Math.max(0,Math.min(gaps.length-1,bi));
-    if(gaps[bi]===gaps[ig])bi=Math.max(0,Math.min(gaps.length-1,bi-1));
-    // the third man has the next gap over — a fill if the ball is going there,
-    // the cutback if it is behind the play
-    out.push({p:third,gap:gaps[bi],
-      role:(gaps[bi].side===runDir?'Fill ':'Cutback ')+gapLabel(gaps[bi]),
-      x:gaps[bi].x,y:fitY});
+  var ig=gaps[nearestGapIndex(gaps,ins.x)],k=ig.k,sd=ig.side;
+  if(k==='A'){
+    put(inner,ig,'Spill '+gapLabel(ig),-1);
+    put(edge ,ig,'Box '+gapLabel(ig),1);                       // the edge tracks him down
+    var bU=gapOn('B',runDir);
+    put(middle,bU,gapLabel(bU));                                // unaffected
+  }else if(k==='B'){
+    put(inner ,ig,'Spill '+gapLabel(ig),-1);
+    put(middle,ig,'Box '+gapLabel(ig),1);
+    var aR=gapOn('A',sd);
+    put(edge,aR,gapLabel(aR));                                  // rotates inside
+  }else{
+    var dG=gapOn('D',sd),bG=gapOn('B',sd);
+    put(middle,dG,'Force '+gapLabel(dG));                       // new force man
+    put(inner ,bG,gapLabel(bG),-1);                             // bumps out to B
+    put(edge  ,bG,'Box '+gapLabel(bG),1);                       // arced, squeezes back in
   }
   return out;
 }
