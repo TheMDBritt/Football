@@ -687,7 +687,7 @@ function drawPlayer(pl){
   var maxW=r*1.7,tw=ctx.measureText(pl.label).width;
   if(tw>maxW){fsz=Math.max(6,Math.floor(fsz*maxW/tw));ctx.font='bold '+fsz+'px sans-serif';}
   fillTextU(pl.label,PX,PY);
-  if(pl.dl){
+  if(pl.dl&&animT==null){   // alignment depth notes are a pre-snap thing
     ctx.fillStyle='rgba(255,215,80,0.85)';
     ctx.font=Math.max(7,Math.round(R0*0.62))+'px sans-serif';
     ctx.textBaseline='middle';
@@ -764,6 +764,7 @@ function render(){
     if(play==='pass'&&a.phase==='run')return;
     if(visIds&&!visIds[a.pid])return;
     if(quizOn&&focusId&&a.pid===focusId)return;      // quiz hides the answer
+    if(animT!=null&&a.shape==='circle')return;       // no static zone bubbles mid-play
     var al=dimFor(a.pid);
     if(al<1){ctx.save();ctx.globalAlpha=al;drawAssign(a);ctx.restore();}else drawAssign(a);
   });
@@ -1954,11 +1955,12 @@ function drawAssign(a){
   if(a.targetPid!=null){var rec=playerById(a.targetPid);if(rec){a.tx=rec.x;a.ty=rec.y;drawArrow(p.x,p.y,rec.x,rec.y,col);drawTag(rec.x,rec.y,a.role,col);}return;}
   if(a.shape==='circle'){
     ctx.save();
-    ctx.strokeStyle=col;ctx.globalAlpha=0.45;ctx.lineWidth=1.5;ctx.setLineDash([2,3]);
+    var a0=ctx.globalAlpha;
+    ctx.strokeStyle=col;ctx.globalAlpha=a0*0.45;ctx.lineWidth=1.5;ctx.setLineDash([2,3]);
     ctx.beginPath();ctx.moveTo(p.x,p.y);ctx.lineTo(a.tx,a.ty);ctx.stroke();
-    ctx.globalAlpha=0.8;ctx.setLineDash([5,4]);
+    ctx.globalAlpha=a0*0.8;ctx.setLineDash([5,4]);
     ctx.beginPath();ctx.ellipse(a.tx,a.ty,a.rx||Math.round(W*0.08),a.ry||Math.round(4.5*YD_V),0,0,Math.PI*2);
-    ctx.lineWidth=1.5;ctx.stroke();ctx.setLineDash([]);ctx.globalAlpha=1;
+    ctx.lineWidth=1.5;ctx.stroke();ctx.setLineDash([]);ctx.globalAlpha=a0;
     ctx.fillStyle=col;ctx.font='bold '+Math.max(9,Math.round(W/90))+'px sans-serif';ctx.textAlign='center';ctx.textBaseline='middle';
     fillTextU(a.role,a.tx,a.ty);
     ctx.restore();
