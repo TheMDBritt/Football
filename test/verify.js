@@ -297,9 +297,17 @@ chk("down, distance and opponent are stored",
 var dupRec=JSON.parse(JSON.stringify(pl[0])); dupRec.id=w.newId();
 w.setPlays(pl.concat([dupRec]));
 var before=w.getPlays().length;
-w.confirm=function(){return true;};
+// the app uses its own dialog now, so accept it the way a person would
+function acceptDialog(){
+  var b=w.document.querySelector("#modal .form .actions button.primary");
+  chk("a confirm dialog was raised", !!b);
+  if(b)b.click();
+}
 w.deletePlay(w.getPlays()[0]);
-chk("deleting by id removes exactly one record", w.getPlays().length===before-1);
+acceptDialog();
+chk("deleting by id removes exactly one record", w.getPlays().length===before-1,
+    before+" -> "+w.getPlays().length);
+chk("no native dialogs remain", !/prompt\(|[^s]confirm\(|[^t]alert\(/.test(html));
 
 w.applyPassPlay("smash");
 var tg=w.autoTags();
@@ -345,13 +353,52 @@ chk("previewing a saved play does not corrupt the live document",
     w.players.length===liveCount && w.ballX===liveBall);
 
 chk("canvas allows vertical panning by default", /touch-action:pan-y/.test(html));
-chk("touchmove ignores non-manipulating gestures", /touchmove[\s\S]{0,90}pointerBusy\(\)\)return/.test(html));
+chk("touchmove ignores non-manipulating gestures", /touchmove[\s\S]{0,400}pointerBusy\(\)\)return/.test(html));
 chk("canvas is keyboard focusable", /id="c" tabindex="0"/.test(html));
 chk("service worker and manifest are wired", /register\(.sw\.js.\)/.test(html) && /rel="manifest"/.test(html));
 chk("offline shell files exist",
     fs.existsSync(path.join(ROOT,"playdesigner/sw.js")) &&
     fs.existsSync(path.join(ROOT,"playdesigner/manifest.webmanifest")));
 chk("print stylesheet present", /@media print/.test(html));
+
+
+/* ---- final cleanup wave ---- */
+chk("history covers the ball spot and the call, not just the diagram", (function(){
+  w.players=[]; w.loadForm("gun_2x2"); w.applyFront("over");
+  var b0=w.ballX, f0=w.curFront;
+  w.saveH(); w.ballX=b0+40; w.curFront="bear";
+  w.document.getElementById("btn-undo").click();
+  return w.ballX===b0 && w.curFront===f0;
+})());
+chk("loading a play starts a fresh history", (function(){
+  w.saveH(); w.saveH();
+  var rec=w.getPlays()[0]; if(!rec)return true;
+  w.loadPlay(rec);
+  return w.hist.length===0 && w.redoStack.length===0;
+})());
+chk("the field is cached between repaints", /_fieldCache/.test(html) && /_fieldKey/.test(html));
+chk("neighbour distances are computed once per frame", /buildNeighbours\(\)/.test(html));
+chk("canvas palette reads the CSS tokens", /tok\(.--c-off./.test(html) && /--c-off:/.test(html));
+chk("pinch and wheel zoom are wired", /zoomAt\(/.test(html) && /_pinch/.test(html));
+chk("zoom stays within bounds", (function(){
+  w.viewScale=1; w.zoomAt(100,100,10);
+  var hi=w.viewScale<=4;
+  w.zoomAt(100,100,0.001);
+  return hi && w.viewScale===1 && w.viewX===0 && w.viewY===0;
+})(), "scale="+w.viewScale);
+chk("pointer mapping survives a zoom", (function(){
+  w.resetView(); w.viewScale=2; w.viewX=-100; w.viewY=-50;
+  var r={left:0,top:0,width:820,height:540};
+  var fake={clientX:300,clientY:200,touches:null};
+  var saveGBCR=w.C.getBoundingClientRect;
+  w.C.getBoundingClientRect=function(){return r;};
+  var p=w.gp(fake);
+  w.C.getBoundingClientRect=saveGBCR;
+  w.resetView();
+  return Math.abs(p.x-((300-(-100))/2))<0.01;
+})());
+chk("the toolbar is grouped into labelled bands",
+    (html.match(/class="tbrow"/g)||[]).length===3 && /class="grp">Offense</.test(html));
 
 console.log("\n" + (fails ? fails + " FAILURE(S)" : "ALL " + "CHECKS PASSED"));
 process.exit(fails ? 1 : 0);
