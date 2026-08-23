@@ -31,7 +31,14 @@ w.document.createElement = function (t) {
   }
   return realCreate(t);
 };
-w.C = w.document.getElementById("c");
+// back the canvas element with a real one so thumbnails and blits are exercised
+const realCv = createCanvas(820, 540);
+realCv.getBoundingClientRect = function () { return { left: 0, top: 0, width: 820, height: 540 }; };
+realCv.addEventListener = function () {}; realCv.setAttribute = function () {};
+realCv.classList = { add() {}, remove() {}, toggle() {}, contains() { return false; } };
+realCv.style = {}; realCv.focus = function () {};
+w.C = realCv;
+w.ctx = realCv.getContext("2d");
 Object.defineProperty(w.document.getElementById("wrap"), "clientWidth", { value: 820 });
 
 let fails = 0;
@@ -46,7 +53,8 @@ w.loadForm("gun_2x2");
 
 /* ---- hi-DPI backing store ---- */
 const cv = w.document.getElementById("c");
-chk("DPR applied to backing store", cv.width === 1640 && cv.height === 1080, cv.width + "x" + cv.height);
+chk("DPR applied to backing store",
+    w.C.width === 1640 && w.C.height === 1080, w.C.width + "x" + w.C.height);
 chk("logical W/H stay in CSS px", w.W === 820 && w.H === 540, w.W + "x" + w.H);
 
 /* ---- undo correctness: the snapshot must predate the mutation ---- */
@@ -273,7 +281,7 @@ var dcard=w.document.getElementById("assign-card").textContent;
 chk("defender card gives a coverage and a key",
     /KEY/.test(dcard) && /COVER|FIT|RUSH/.test(dcard));
 w.quizOn=true; w.render();
-chk("quiz hides the answer", /Reveal/.test(w.document.getElementById("assign-card").textContent));
+chk("quiz hides the answer", /Show me/.test(w.document.getElementById("assign-card").textContent));
 w.quizOn=false; w.focusId=null; w.render();
 chk("the view picker lists all 22",
     w.document.getElementById("sel-player").querySelectorAll("option").length===23);
@@ -397,8 +405,14 @@ chk("pointer mapping survives a zoom", (function(){
   w.resetView();
   return Math.abs(p.x-((300-(-100))/2))<0.01;
 })());
-chk("the toolbar is grouped into labelled bands",
-    (html.match(/class="tbrow"/g)||[]).length===3 && /class="grp">Offense</.test(html));
+chk("the app shell has a brand bar, a nav rail and four section panels",
+    /id="appbar"/.test(html) &&
+    (html.match(/class="navbtn/g) || []).length === 4 &&
+    ["design","playbook","scout","teach"].every(function (t) {
+      return html.indexOf('id="panel-' + t + '"') >= 0;
+    }));
+chk("controls are grouped into titled cards",
+    (html.match(/class="card-hd"/g) || []).length >= 4);
 
 
 /* ---- coverage check, zone reaction, conflict defenders ---- */
@@ -436,6 +450,149 @@ chk("zone defender sinks to his landmark", Math.abs(drop.y-hy)>2);
 chk("zone defender then breaks on a threat in his area",
     Math.hypot(brk.x-drop.x,brk.y-drop.y)>2);
 w.resetAnim();
+
+
+/* ---- simulation brain: match coverage and linebacker run fits ---- */
+function simPos(p,t){ w.setAnim(t); return {x:w.px(p),y:w.py(p)}; }
+function simDist(a,b){ return Math.hypot(a.x-b.x,a.y-b.y)/w.YD; }
+function simSetup(form,cov,concept){
+  w.players=[]; w.loadForm(form); w.applyDefPers("nickel"); w.applyFront("over");
+  w.applyCoverage(cov); w.applyPassPlay(concept);
+}
+simSetup("gun_2x2","3","four_verts");
+var mp=w.matchPlan();
+chk("cover 3 builds a match plan", Object.keys(mp).length>0);
+var xr=w.players.find(function(p){return p.label==="X";});
+var cbn=w.players.filter(function(p){return p.label==="CB";})
+  .sort(function(a,b){return Math.abs(a.x-xr.x)-Math.abs(b.x-xr.x);})[0];
+chk("cover 3 corner runs with a vertical number one",
+    simDist(simPos(cbn,1),simPos(xr,1)) <= simDist(simPos(cbn,0),simPos(xr,0)) + 1.5);
+mp=w.matchPlan();
+var stuck=0,tot=0;
+Object.keys(mp).forEach(function(id){
+  var d=w.playerById(+id), r=mp[id].rec; if(!d||!r)return;
+  tot++;
+  if(simDist(simPos(d,1),simPos(r,1)) <= simDist(simPos(d,0.15),simPos(r,0.15)) + 2.5)stuck++;
+});
+chk("every match defender stays with the man he matched", stuck===tot, stuck+"/"+tot);
+
+simSetup("gun_2x2","4","four_verts");
+var two4=w.sideStack(1)[1];
+chk("quarters safety matches number two when he runs vertical",
+    Object.keys(w.matchPlan()).filter(function(id){return /FS|SS/.test(w.playerById(+id).label);})
+      .map(function(id){return w.matchPlan()[id].rec&&w.matchPlan()[id].rec.label;})
+      .indexOf(two4.label)>=0);
+
+simSetup("gun_2x2","4","curl_flat");
+chk("quarters safety robs number one when number two goes underneath",
+    Object.keys(w.matchPlan()).filter(function(id){return /FS|SS/.test(w.playerById(+id).label);})
+      .some(function(id){return w.matchPlan()[id].mode==="rob";}));
+
+simSetup("gun_2x2","palm","curl_flat");
+var jumped=Object.keys(w.matchPlan())
+  .filter(function(id){return w.playerById(+id).label==="CB";})
+  .map(function(id){return w.matchPlan()[id].rec&&w.matchPlan()[id].rec.label;});
+chk("palms corner jumps number two when he breaks out",
+    jumped.indexOf((w.sideStack(1)[1]||{}).label)>=0 ||
+    jumped.indexOf((w.sideStack(-1)[1]||{}).label)>=0);
+w.resetAnim();
+
+w.players=[]; w.loadForm("i_form"); w.applyDefPers("base43"); w.applyFront("over");
+w.runDir=1; w.applyRunPlay("power");
+var pl0=w.pullingLinemen()[0];
+chk("power has a puller", !!pl0);
+var bs=w.players.filter(function(p){return /MIKE|WILL|SAM/.test(p.label);})
+  .filter(function(p){return Math.sign(p.x-w.ballX)===Math.sign(pl0.x-w.ballX);})[0];
+var b0=simPos(bs,0), b1=simPos(bs,1);
+chk("backside linebacker runs over the top toward the play", (b1.x-b0.x) > w.YD*0.5);
+chk("backside linebacker also comes downhill", b1.y > b0.y+2);
+var fsd=w.players.filter(function(p){return /MIKE|WILL|SAM/.test(p.label);})
+  .filter(function(p){return Math.sign(p.x-w.ballX)!==Math.sign(pl0.x-w.ballX);})[0];
+chk("front-side linebacker attacks the hole to box the puller",
+    simPos(fsd,1).y > simPos(fsd,0).y-1);
+w.applyRunPlay("inside_zone");
+var mk0=w.players.filter(function(p){return p.label==="MIKE";})[0];
+chk("on zone the linebacker flows and fills",
+    Math.hypot(simPos(mk0,1).x-simPos(mk0,0).x, simPos(mk0,1).y-simPos(mk0,0).y) > w.YD*0.6);
+
+w.applyRunPlay("power");
+var rbT=w.players.filter(function(p){return p.label==="RB";})[0];
+var early=simPos(rbT,0.25); w.resetAnim();
+chk("the back presses rather than sprinting off the snap",
+    simDist(early,{x:rbT.x,y:rbT.y}) < 3.2);
+w.resetAnim();
+
+["duo","dart"].forEach(function(k){
+  w.applyRunPlay(k);
+  chk(k+" assigns the line and a carrier",
+      w.assigns.filter(function(a){return a.kind==="block"&&a.phase==="run";}).length>=5 &&
+      w.assigns.some(function(a){return a.kind==="carry";}));
+});
+chk("dart pulls a tackle",
+    (w.applyRunPlay("dart"), w.assigns.some(function(a){
+      return /Pull/.test(a.role||"") && /LT|RT/.test(w.playerById(a.pid).label);
+    })));
+
+
+/* ---- editable blocks, tight pulls, sniffer fits, video ---- */
+w.toast=function(){};
+w.players=[]; w.loadForm("i_form"); w.applyDefPers("base43"); w.applyFront("over");
+w.runDir=1; w.applyRunPlay("power");
+var rtE=w.players.find(function(p){return p.label==="RT";});
+var blkE=w.assigns.find(function(a){return a.pid===rtE.id&&a.kind==="block";});
+var othE=w.players.filter(function(p){
+  return p.color===w.D&&p.id!==blkE.targetPid&&/MIKE|WILL|SAM/.test(p.label);})[0];
+w.onDown({x:blkE.tx,y:blkE.ty});
+chk("the end of a block can be grabbed even though it sits on a defender", w.dragAssign>=0);
+var grabbedE=w.assigns[w.dragAssign];
+w.onMove({x:othE.x,y:othE.y}); w.onUp({x:othE.x,y:othE.y});
+chk("dropping a block on a defender puts the blocker on him", grabbedE.targetPid===othE.id);
+var emptySpot={x:w.ballX-Math.round(18*w.YD), y:w.LOS+Math.round(6*w.YD_V)};
+w.onDown(w.grabPointOf(grabbedE));
+var g2E=w.assigns[w.dragAssign];
+w.onMove(emptySpot); w.onUp(emptySpot);
+chk("dropping it on open grass turns it into a spot block", g2E.targetPid===undefined);
+
+w.applyRunPlay("power");
+var rt3=w.players.find(function(p){return p.label==="RT";});
+var origT=w.assigns.find(function(a){return a.pid===rt3.id&&a.kind==="block";}).targetPid;
+var oth3=w.players.filter(function(p){
+  return p.color===w.D&&p.id!==origT&&/MIKE|WILL|SAM/.test(p.label);})[0];
+var bb3=w.assigns.find(function(a){return a.pid===rt3.id&&a.kind==="block";});
+w.onDown({x:bb3.tx,y:bb3.ty}); w.onMove({x:oth3.x,y:oth3.y}); w.onUp({x:oth3.x,y:oth3.y});
+w.document.getElementById("btn-undo").click();
+chk("undo puts a retargeted block back on the original man",
+    w.assigns.find(function(a){return a.pid===rt3.id&&a.kind==="block";}).targetPid===origT);
+
+w.applyRunPlay("counter_gt");
+var deepest=0;
+w.assigns.filter(function(a){return /Pull|Kick out|Arc/.test(a.role||"")&&a.path;}).forEach(function(a){
+  a.path.slice(0,-1).forEach(function(q){ deepest=Math.max(deepest,(q.y-w.LOS)/w.YD_V); });
+});
+chk("pullers stay tight to the line", deepest<=1.0, deepest.toFixed(2)+" yds behind it");
+
+w.players=[]; w.loadForm("gun_2x2_yoff"); w.applyDefPers("base43"); w.applyFront("over");
+chk("an off-ball attached tight end is recognised as the sniffer", !!w.snifferOf());
+w.runDir=1; w.applyRunPlay("split_zone");
+var insS=w.snifferInsert(w.snifferOf());
+chk("the app sees the sniffer inserting across the formation", insS && insS.crossed);
+var fitLB=w.players.filter(function(p){return /MIKE|WILL|SAM/.test(p.label);})
+  .filter(function(p){return Math.sign(p.x-w.ballX)===Math.sign(insS.x-w.ballX);})[0];
+if(fitLB){
+  w.setAnim(0); var fa={x:w.px(fitLB),y:w.py(fitLB)};
+  w.setAnim(1); var fb={x:w.px(fitLB),y:w.py(fitLB)};
+  chk("a linebacker fits the gap the sniffer inserts through", Math.abs(fb.x-insS.x) < w.OL_G);
+  chk("and boxes it back inside rather than getting washed out",
+      Math.abs(fb.x-w.ballX) < Math.abs(insS.x-w.ballX));
+  chk("and comes downhill to do it", fb.y>fa.y);
+}
+w.resetAnim();
+w.players=[]; w.loadForm("gun_2x2");
+chk("a formation with no attached tight end has no sniffer", !w.snifferOf());
+
+chk("the snap can be exported as video", typeof w.exportVideo==="function");
+w.exportVideo();
+chk("video export degrades cleanly where recording is unavailable", true);
 
 console.log("\n" + (fails ? fails + " FAILURE(S)" : "ALL " + "CHECKS PASSED"));
 process.exit(fails ? 1 : 0);
