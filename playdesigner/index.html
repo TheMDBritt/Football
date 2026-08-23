@@ -690,10 +690,14 @@ var PFONT='"Public Sans","Helvetica Neue",Arial,sans-serif';
 // Chalkboard convention: the offence is circles, the line is squares, the defence is
 // an X. Flat and matte — no gloss, no drop shadow.
 function drawPlayer(pl){
-  var R0=R(),r=R0,nd=nearestDist(pl),PX=px(pl),PY=py(pl);
-  if(nd<2*R0+2)r=Math.max(Math.round(R0*0.62),Math.floor(nd/2-1));
-  var live=animT!=null;
-  if(live)r=Math.round(r*0.88);
+  var R0=R(),r=R0,PX=px(pl),PY=py(pl),live=animT!=null;
+  // Pre-snap, tuck overlapping tokens in a little so a stacked alignment stays
+  // readable. During the play they are MEANT to converge — blockers meet defenders,
+  // a back runs through a crease — so shrinking them there just looks broken.
+  if(!live){
+    var nd=nearestDist(pl);
+    if(nd<2*R0+2)r=Math.max(Math.round(R0*0.8),Math.floor(nd/2-1));
+  }
   ctx.save();ctx.lineJoin='miter';ctx.lineCap='butt';
   ctx.fillStyle=pl.color;
   if(pl.shape==='sq'){ctx.fillRect(PX-r,PY-r,r*2,r*2);}

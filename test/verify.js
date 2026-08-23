@@ -737,5 +737,40 @@ chk("no coverage player ends up across the line of scrimmage",
       .every(function(p){return depthOf(p) > 1;}));
 w.resetAnim();
 
+
+/* ---- tokens keep their size while the play runs ---- */
+(function(){
+  var realArc=w.ctx.arc.bind(w.ctx), seen=[], colours=new Set();
+  w.ctx.arc=function(x,y,r,a,b){
+    if(colours.has(String(w.ctx.fillStyle).toLowerCase()))seen.push(r);
+    return realArc(x,y,r,a,b);
+  };
+  function holds(label,setup){
+    setup();
+    colours.clear();
+    w.players.forEach(function(p){colours.add(String(p.color).toLowerCase());});
+    var lo=1e9,hi=-1e9;
+    for(var t=0;t<=1.001;t+=0.05){
+      w.setAnim(t); seen=[]; w.render();
+      seen.forEach(function(r){ lo=Math.min(lo,r); hi=Math.max(hi,r); });
+    }
+    w.resetAnim();
+    chk(label, Math.abs(hi-lo)<0.51, lo.toFixed(1)+"-"+hi.toFixed(1));
+  }
+  holds("power keeps its token size through the play", function(){
+    w.players=[]; w.loadForm("i_form"); w.applyDefPers("base43"); w.applyFront("over");
+    w.runDir=1; w.applyRunPlay("power");
+  });
+  holds("inside zone keeps its token size through the play", function(){
+    w.players=[]; w.loadForm("gun_2x2"); w.applyDefPers("nickel"); w.applyFront("over");
+    w.runDir=1; w.applyRunPlay("inside_zone");
+  });
+  holds("four verticals keeps its token size through the play", function(){
+    w.players=[]; w.loadForm("gun_2x2"); w.applyDefPers("nickel"); w.applyFront("over");
+    w.applyCoverage("3"); w.applyPassPlay("four_verts");
+  });
+  w.ctx.arc=realArc;
+})();
+
 console.log("\n" + (fails ? fails + " FAILURE(S)" : "ALL " + "CHECKS PASSED"));
 process.exit(fails ? 1 : 0);
