@@ -3,7 +3,7 @@
   "private": true,
   "description": "Coach's Play Designer — a single-file play/formation diagramming tool.",
   "scripts": {
-    "test": "node test/verify.js && node test/week-flow.js"
+    "test": "node test/verify.js && node test/week-flow.js && node test/browser-boot.js"
   },
   "devDependencies": {
     "canvas": "^3.2.3",
