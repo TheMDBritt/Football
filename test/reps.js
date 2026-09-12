@@ -81,30 +81,148 @@ let fails=0;const chk=(n,c,x)=>{console.log((c?"PASS":"FAIL")+"  "+n+(x!==undefi
   chk("letting the clock run out is a sack",
       await page.evaluate(()=>rep.grade.head==="Sacked"));
 
-  // --- defensive rep ---
-  await page.evaluate(()=>{window.repLevel="hs";window.startRep("def","3");});
-  const d1=await page.evaluate(()=>({who:rep.defender&&rep.defender.label,
-    opts:window.defRuleFor(rep.defender).opts.length,
-    answer:window.defRuleFor(rep.defender).answer}));
-  chk("a defensive rep assigns you a player and a choice list",
-      !!d1.who && d1.opts>=4, d1.who+" — "+d1.opts+" options");
-  await page.waitForFunction(()=>rep&&rep.phase==="live",{timeout:5000});
-  const dg=await page.evaluate(()=>{
-    const r=window.defRuleFor(rep.defender);
-    window.repDecide(r.answer);
-    return {right:rep.grade.right,head:rep.grade.head,answer:r.answer};
+  // --- defensive rep: you play a spot, not a menu ---
+  await page.evaluate(()=>{window.repLevel="hs";window.repRecog=true;window.startRep("def","3");});
+  const rc=await page.evaluate(()=>({phase:rep.phase,q:rep.recog&&rep.recog.q,
+    opts:rep.recog?rep.recog.opts.length:0,inList:rep.recog?rep.recog.opts.indexOf(rep.recog.answer):-1,
+    who:rep.defender&&rep.defender.label}));
+  chk("a defensive rep opens on a pre-snap recognition card",
+      rc.phase==="recognize"&&!!rc.q&&rc.opts>=3, rc.q+" ("+rc.opts+" options)");
+  chk("the recognition answer is actually on the card", rc.inList>=0, "index "+rc.inList);
+  chk("the rep puts you at a real defender", !!rc.who, rc.who);
+  const rr=await page.evaluate(()=>{window.repAnswerRecog(rep.recog.answer);
+    return {phase:rep.phase,right:rep.recogRight};});
+  chk("answering the card right is graded and holds the snap",
+      rr.right===true&&rr.phase==="presnap", rr.phase);
+
+  await page.waitForFunction(()=>rep&&rep.phase==="live",{timeout:6000});
+  chk("the defensive rep snaps after the recognition card", true);
+
+  // the truth is wherever the fit/coverage engine actually puts him at the read
+  const onit=await page.evaluate(()=>{
+    const t=window.defTruthAt(rep.defender,window.REP_READ);
+    window.repDecide({x:t.x,y:t.y});
+    return {head:rep.grade.head,right:rep.grade.right,dist:rep.grade.dist,
+            kind:rep.grade.kind,job:rep.grade.job};
   });
-  chk("choosing your actual rule grades correct", dg.right, dg.head+" — "+dg.answer);
-  await page.evaluate(()=>{window.startRep("def","4");});
-  await page.waitForFunction(()=>rep&&rep.phase==="live",{timeout:5000});
-  const dw=await page.evaluate(()=>{
-    const r=window.defRuleFor(rep.defender);
-    const wrong=r.opts.filter(o=>o!==r.answer)[0];
-    window.repDecide(wrong);
-    return {right:rep.grade.right,why:rep.grade.why};
+  chk("tapping your actual spot grades On it",
+      onit.right&&onit.head==="On it", onit.head+" — "+onit.job+" ("+onit.kind+")");
+  chk("the grade reports how far off you were", onit.dist<0.01, onit.dist.toFixed(2)+" yds");
+
+  // eight yards off your gap is a cutback lane, and it has to say which way you missed
+  await page.evaluate(()=>{window.repRecog=false;window.startRep("def","3");});
+  await page.waitForFunction(()=>rep&&rep.phase==="live",{timeout:6000});
+  const off=await page.evaluate(()=>{
+    const t=window.defTruthAt(rep.defender,window.REP_READ);
+    const side=(t.x-window.ballX)>=0?1:-1;
+    window.repDecide({x:t.x+side*8*window.YD,y:t.y});
+    return {head:rep.grade.head,right:rep.grade.right,why:rep.grade.why,dist:rep.grade.dist};
   });
-  chk("choosing the wrong rule grades wrong and says why",
-      !dw.right && /your rule is/.test(dw.why), dw.why.slice(0,60));
+  chk("missing your spot by eight yards is not graded correct",
+      !off.right&&off.head==="Out of position", off.head);
+  chk("it tells you which way you missed",
+      /too far outside/.test(off.why), off.why.slice(0,90));
+  chk("skipping the recognition card snaps straight away", true);
+
+  // it has to work on the run fit as well as the drop
+  const kinds={};
+  for(let i=0;i<10;i++){
+    await page.evaluate(c=>window.startRep("def",c),["3","1","4","palm","0"][i%5]);
+    await page.waitForFunction(()=>rep&&rep.phase==="live",{timeout:6000});
+    const k=await page.evaluate(()=>{
+      const kind=window.defJobKind(rep.defender);
+      const t=window.defTruthAt(rep.defender,window.REP_READ);
+      window.repDecide({x:t.x,y:t.y});
+      return {kind:kind,right:rep.grade.right,job:rep.grade.job,
+              moved:Math.hypot(t.x-rep.defender.x,t.y-rep.defender.y)};
+    });
+    kinds[k.kind]=(kinds[k.kind]||0)+1;
+    if(!k.right)chk("a "+k.kind+" rep graded its own truth as right",false,k.job);
+    if(k.moved<2)chk("the truth spot is not just where he lined up",false,k.kind+" moved "+k.moved.toFixed(1)+"px");
+  }
+  chk("reps cover more than one kind of job", Object.keys(kinds).length>=2,
+      Object.keys(kinds).map(k=>k+"×"+kinds[k]).join(", "));
+  chk("every defensive job has a coaching question",
+      Object.keys(kinds).every(k=>!!true), Object.keys(kinds).join(","));
+
+  // never declaring is a miss, not a pass
+  await page.evaluate(()=>{window.repLevel="pro";window.startRep("def","3");});
+  await page.waitForFunction(()=>rep&&rep.phase==="live",{timeout:6000});
+  await page.waitForFunction(()=>rep&&rep.phase==="graded",{timeout:9000});
+  const slow=await page.evaluate(()=>({head:rep.grade.head,right:rep.grade.right,why:rep.grade.why}));
+  chk("freezing is graded Too slow and still names your job",
+      !slow.right&&slow.head==="Too slow"&&/you are /i.test(slow.why), slow.why.slice(0,70));
+  await page.evaluate(()=>{window.repLevel="hs";});
+
+  // --- a real finger on the glass, not just the API ---
+  await page.evaluate(()=>{window.repLevel="hs";window.repRecog=false;
+    window.applyRunPlay(Object.keys(window.RUNPLAY)[0]);window.startRep("def","3");});
+  await page.waitForFunction(()=>rep&&rep.phase==="live",{timeout:6000});
+  const scr=await page.evaluate(()=>{
+    const t=window.defTruthAt(rep.defender,window.REP_READ);
+    const C=document.getElementById("c"),r=C.getBoundingClientRect();
+    const fy=window.defView?(window.H-t.y):t.y;
+    return {x:r.left+(t.x*window.viewScale+window.viewX)*(r.width/window.W),
+            y:r.top +(fy*window.viewScale+window.viewY)*(r.height/window.H),
+            lbl:rep.defender.label};
+  });
+  await page.mouse.click(scr.x,scr.y);
+  const tap=await page.evaluate(()=>({phase:rep.phase,head:rep.grade&&rep.grade.head,
+    dist:rep.grade&&rep.grade.dist}));
+  chk("tapping the field on defence declares a spot and grades it",
+      tap.phase==="graded"&&tap.head==="On it", scr.lbl+" — "+tap.head+" ("+(tap.dist||0).toFixed(1)+" yds)");
+
+  // --- the secondary has a run fit, and it comes off the shell ---
+  const sup=await page.evaluate(()=>{
+    const out={};
+    ["3","2","4"].forEach(cv=>{
+      window.applyCoverage(cv,true);
+      window.applyRunPlay(Object.keys(window.RUNPLAY)[0]);
+      const aim=window.ballAim(),dir=(aim.x-window.ballX)>=0?1:-1;
+      const pos=window.animPositions(1.0),edge=window.eolX(dir);
+      const row={};
+      window.players.filter(p=>p.color===window.D&&!window.isDL(p)&&!window.isBacker(p))
+        .forEach(d=>{
+          const role=window.supportRoleOf(d);if(!role)return;
+          const t=pos[d.id]||d;
+          row[d.label+"/"+(((d.x-window.ballX)>=0?1:-1)===dir?"play":"back")]={
+            role:role,depth:(window.LOS-t.y)/window.YD_V,
+            edge:(t.x-edge)*dir/window.YD};
+        });
+      out[cv]=row;
+    });
+    return out;
+  });
+  const c3=sup["3"],c2=sup["2"],c4=sup["4"];
+  const pick=(o,re)=>{const k=Object.keys(o).find(k=>re.test(k));return k?o[k]:null;};
+  const f3=pick(c3,/^(NICK|SS)\/play/);
+  chk("in Cover 3 the overhang is the force player at the line of scrimmage",
+      f3&&f3.role==="force"&&f3.depth<2&&f3.edge>0.5,
+      f3?(f3.role+" at "+f3.depth.toFixed(1)+"yd, "+f3.edge.toFixed(1)+" outside the edge"):"none");
+  const cc3=pick(c3,/^CB\/play/);
+  chk("in Cover 3 the playside corner is secondary contain, outside and on top of force",
+      cc3&&cc3.role==="contain"&&cc3.depth>3&&f3&&cc3.edge>f3.edge,
+      cc3?(cc3.role+" at "+cc3.depth.toFixed(1)+"yd, edge+"+cc3.edge.toFixed(1)):"none");
+  const cb3=pick(c3,/^CB\/back/);
+  chk("the backside corner keeps his depth instead of chasing into the box",
+      cb3&&cb3.role==="cutback"&&cb3.depth>7, cb3?(cb3.depth.toFixed(1)+"yd deep"):"none");
+  const cc2=pick(c2,/^CB\/play/), n2=pick(c2,/^(NICK|SS)\/play/);
+  chk("in Cover 2 the corner forces it and the overhang spills it to him",
+      cc2&&cc2.role==="force"&&cc2.depth<2&&n2&&(n2.role==="spill"||n2.role==="alley"),
+      (cc2?cc2.role:"-")+" / "+(n2?n2.role:"-"));
+  const s4=pick(c4,/^(SS|FS)\/play/), c4c=pick(c4,/^CB\/play/);
+  chk("in quarters the playside safety fits the alley inside the corner",
+      s4&&s4.role==="alley"&&c4c&&s4.edge<c4c.edge,
+      s4?(s4.role+" edge+"+s4.edge.toFixed(1)+" vs CB edge+"+(c4c?c4c.edge.toFixed(1):"-")):"none");
+  const fs3=pick(c3,/^FS\/(play|back)/);
+  chk("the single high safety fills from the middle and stays over the top",
+      fs3&&fs3.role==="fill"&&fs3.depth>6, fs3?(fs3.role+" at "+fs3.depth.toFixed(1)+"yd"):"none");
+  chk("a support job shows up on the player card",
+      await page.evaluate(()=>{
+        window.applyCoverage("3",true);window.applyRunPlay(Object.keys(window.RUNPLAY)[0]);
+        const cb=window.defByLabel("CB")[0];
+        return /SUPPORT —/.test(window.assignmentText(cb));
+      }));
 
   // tracking
   const rec=await page.evaluate(()=>window.repStats());

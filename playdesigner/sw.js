@@ -1,6 +1,6 @@
 /* Offline shell for the play designer. The app is one file, so precache it and
    serve it from the cache first — a coach in a field house has no signal. */
-var CACHE='cpd-v2';
+var CACHE='cpd-v3';
 // everything the app is made of — there is nothing else to fetch
 var ASSETS=['./','./index.html','./manifest.webmanifest','./icon.svg'];
 self.addEventListener('install',function(e){
