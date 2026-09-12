@@ -405,10 +405,10 @@ chk("pointer mapping survives a zoom", (function(){
   w.resetView();
   return Math.abs(p.x-((300-(-100))/2))<0.01;
 })());
-chk("the app shell has a brand bar, a nav rail and four section panels",
+chk("the app shell has a brand bar, a nav rail and its section panels",
     /id="appbar"/.test(html) &&
-    (html.match(/class="navbtn/g) || []).length === 4 &&
-    ["design","playbook","scout","teach"].every(function (t) {
+    (html.match(/class="navbtn/g) || []).length === 5 &&
+    ["design","playbook","scout","teach","reps"].every(function (t) {
       return html.indexOf('id="panel-' + t + '"') >= 0;
     }));
 chk("controls are grouped into titled cards",

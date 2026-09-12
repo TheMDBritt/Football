@@ -236,6 +236,37 @@ canvas.grabbing{touch-action:none}
   cursor:pointer;font-size:13px;min-height:32px;color:var(--ink-2)}
 #ctxmenu button:hover{background:var(--ink);color:var(--sheet)}
 
+.rep-score{font-family:var(--data);font-size:11px;letter-spacing:.05em;color:var(--ink-3);
+  text-transform:uppercase;padding:8px 0;border-top:1px solid var(--rule);border-bottom:1px solid var(--rule)}
+#rep-body{display:flex;flex-direction:column;gap:11px}
+#rep-body:empty{display:none}
+.rep-call{font-size:13px;color:var(--ink-2);line-height:1.5}
+.rep-call b{display:block;font-family:var(--disp);font-size:22px;font-weight:700;letter-spacing:.03em;
+  text-transform:uppercase;color:var(--ink);margin-bottom:3px}
+.rep-clock{position:relative;font-family:var(--disp);font-size:30px;font-weight:700;line-height:1;
+  padding:9px 0 13px;border-bottom:3px solid var(--rule-2)}
+.rep-clock i{position:absolute;left:0;bottom:-3px;height:3px;background:var(--ink);display:block}
+.rep-clock i.hot{background:var(--danger)}
+.rep-hint{font-size:12.5px;color:var(--ink-3)}
+.rep-opts{display:grid;grid-template-columns:1fr;gap:6px}
+.rep-opts button{text-align:left;background:var(--sheet);border:1px solid var(--rule-2);padding:10px 12px;
+  cursor:pointer;font-size:13px;min-height:40px}
+.rep-opts button:hover{background:var(--ink);color:var(--sheet);border-color:var(--ink)}
+.rep-result{border:1px solid var(--rule-2);border-left:4px solid var(--ink-3);padding:12px 14px;
+  font-size:13px;line-height:1.5;color:var(--ink-2)}
+.rep-result b{display:block;font-family:var(--disp);font-size:24px;font-weight:700;letter-spacing:.03em;
+  text-transform:uppercase;color:var(--ink);margin-bottom:4px}
+.rep-result.good{border-left-color:#2E6B41}
+.rep-result.bad{border-left-color:var(--danger)}
+.rep-meta{font-family:var(--data);font-size:10px;letter-spacing:.05em;text-transform:uppercase;
+  color:var(--ink-3);margin-top:7px}
+#rep-body table.chk{border-collapse:collapse;width:100%;font-size:12.5px}
+#rep-body table.chk th{text-align:left;font-family:var(--disp);font-size:14px;font-weight:600;
+  letter-spacing:.06em;text-transform:uppercase;color:var(--ink-3);padding:4px 10px 4px 0;
+  border-bottom:1px solid var(--rule-2)}
+#rep-body table.chk td{padding:5px 10px 5px 0;border-bottom:1px solid var(--rule)}
+#rep-body table.chk td.good{font-weight:700;color:var(--ink)}
+@media (pointer:coarse){.rep-opts button{min-height:48px}}
 #toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%) translateY(12px);
   background:var(--ink);color:var(--sheet);padding:11px 18px;font-size:13px;font-weight:500;
   opacity:0;pointer-events:none;transition:opacity .16s,transform .16s;z-index:400;max-width:90vw;text-align:center}
@@ -292,6 +323,7 @@ canvas.grabbing{touch-action:none}
     <button class="navbtn" data-tab="playbook">Playbook</button>
     <button class="navbtn" data-tab="scout">Scout</button>
     <button class="navbtn" data-tab="teach">Teach</button>
+    <button class="navbtn" data-tab="reps">Reps</button>
   </nav>
 
   <main id="main">
@@ -474,6 +506,43 @@ canvas.grabbing{touch-action:none}
         </div>
       </div>
 
+      <div class="panel" id="panel-reps">
+        <div class="card">
+          <div class="card-hd">Reps</div>
+          <div class="card-bd">
+            <p class="hint">You get the call, then a look you have not seen. It rotates after the snap and a clock runs. Decide.</p>
+            <label class="fld"><span>Work against</span>
+              <select id="sel-reppin">
+                <option value="">Mix it up</option>
+                <option value="0">Cover 0</option>
+                <option value="1">Cover 1</option>
+                <option value="2">Tampa 2</option>
+                <option value="3">Cover 3</option>
+                <option value="4">Cover 4</option>
+                <option value="palm">Palms</option>
+                <option value="6">Cover 6</option>
+                <option value="2man">2-Man</option>
+                <option value="ripliz">Rip/Liz</option>
+              </select>
+            </label>
+            <label class="fld"><span>Game speed</span>
+              <select id="sel-replevel">
+                <option value="youth">Youth — 4.0s</option>
+                <option value="hs" selected>High school — 3.2s</option>
+                <option value="college">College — 2.6s</option>
+                <option value="pro">Pro — 2.2s</option>
+              </select>
+            </label>
+            <div class="btnrow">
+              <button id="btn-rep-off" class="act">Take a rep at QB</button>
+              <button id="btn-rep-def">Take a rep on defence</button>
+            </div>
+            <div id="rep-score" class="rep-score"></div>
+            <div id="rep-body"></div>
+            <div class="btnrow"><button id="btn-rep-reset">Clear my record</button></div>
+          </div>
+        </div>
+      </div>
       <div class="panel" id="panel-teach">
         <div class="card">
           <div class="card-hd">Teach</div>
@@ -1321,6 +1390,11 @@ function onDown(pos){
       routeAnchorId=players[pi].id;drawing=true;curPts=[pos];return;
     }
     beginEdit();dragIdx=pi;dragOff={x:pos.x-players[pi].x,y:pos.y-players[pi].y};return;
+  }
+  if(rep&&rep.phase==='live'&&rep.side==='off'){
+    var ri=hitPAny(pos.x,pos.y);
+    if(ri>=0&&players[ri].color===O&&!isOL(players[ri])){repDecide(players[ri]);return;}
+    return;
   }
   if(tool==='assign'){
     var hs=hitStem(pos.x,pos.y);if(hs>=0){beginEdit();stemDrag=hs;return;}
@@ -2236,6 +2310,13 @@ document.getElementById('sel-speed').addEventListener('change',function(){animSp
 document.getElementById('sel-player').addEventListener('change',function(){focusId=this.value?parseInt(this.value,10):null;cardMode='player';render();});
 document.getElementById('btn-quiz').addEventListener('click',function(){quizOn=!quizOn;this.classList.toggle('act',quizOn);render();});
 document.getElementById('btn-check').addEventListener('click',coverageCheck);
+document.getElementById('btn-rep-off').addEventListener('click',function(){startRep('off');});
+document.getElementById('btn-rep-def').addEventListener('click',function(){startRep('def');});
+document.getElementById('sel-replevel').addEventListener('change',function(){repLevel=this.value;renderRep();});
+document.getElementById('sel-reppin').addEventListener('change',function(){repPin=this.value;});
+document.getElementById('btn-rep-reset').addEventListener('click',function(){
+  repSave({n:0,right:0,ms:0,byCov:{}});renderRep();toast('Record cleared.');
+});
 document.querySelectorAll('.navbtn').forEach(function(b){
   b.addEventListener('click',function(){setTab(b.dataset.tab);});
 });
@@ -3737,6 +3818,7 @@ function renderCard(){
 function dimFor(id){
   var a=1;
   if(animT!=null)a=0.20;                       // art recedes while the snap runs
+  if(rep&&rep.phase==='live')a=0;               // in a rep you read bodies, not arrows
   if(focusId&&id!==focusId)a=Math.min(a,0.16);  // player view mutes everyone else
   return a;
 }
@@ -4014,11 +4096,12 @@ var curTab='design';
 function setTab(t){
   curTab=t;
   document.querySelectorAll('.navbtn').forEach(function(b){b.classList.toggle('act',b.dataset.tab===t);});
-  ['design','playbook','scout','teach'].forEach(function(k){
+  ['design','playbook','scout','teach','reps'].forEach(function(k){
     var el=document.getElementById('panel-'+k);
     if(el)el.classList.toggle('act',k===t);
   });
   var full=(t==='playbook'||t==='scout');
+  if(t!=='reps'){stopRep();rep=null;}
   document.getElementById('stage').style.display=full?'none':'';
   document.getElementById('side').style.display=full?'none':'';
   document.body.classList.toggle('wide',full);
@@ -4626,6 +4709,325 @@ function markSnifferFits(dir){
     put(lb2,'D gap off sniffer',sn.x+sside*OL_G*0.85,LOS-Math.round(0.15*YD_V));
   }
 }
+
+/* ================= REPS =================
+   A live decision rep, the way a QB trainer works: you get the call, you line up
+   against a look you have not seen, the shell rotates after the snap, and a clock
+   runs. You pick where the ball goes. It is graded against what the coverage engine
+   actually did — separation at the instant you threw, and how long you took. */
+var REPLEVEL={
+  youth  :{name:'Youth',   clock:4.0},
+  hs     :{name:'High school', clock:3.2},
+  college:{name:'College', clock:2.6},
+  pro    :{name:'Pro',     clock:2.2}
+};
+var repLevel='hs';
+var REPCOV=['0','1','2','3','4','palm','6','2man','ripliz'];
+var REPPRESS=['','','','double_a','lb_fire','nickel_fire','fire_zone'];
+var rep=null,_repRAF=null;
+
+function repStats(){
+  try{var v=JSON.parse(localStorage.getItem('cpd_reps'));return v&&v.n?v:{n:0,right:0,ms:0,byCov:{}};}
+  catch(e){return {n:0,right:0,ms:0,byCov:{}};}
+}
+function repSave(s){try{localStorage.setItem('cpd_reps',JSON.stringify(s));}catch(e){}}
+
+/* --- separation at a moment in the play, from the engine's own positions --- */
+// Roughly how long the ball is in the air, on the same timeline the snap runs on.
+var REP_FLIGHT=0.30;
+// You do not throw to where a receiver is, you throw to where he will be. Grading on
+// separation at the moment of release just measures the corner's cushion and calls
+// everybody open — so openness is always evaluated at ball arrival.
+function repArrival(t){return Math.min(1,t+REP_FLIGHT);}
+function repOpenness(t){
+  var pos=animPositions(t),out=[];
+  eligibles().forEach(function(r){
+    if(!routes.some(function(q){return q.type==='tree'&&q.pid===r.id;}))return;
+    var rp=pos[r.id];if(!rp)return;
+    var near=1e9,who=null;
+    players.forEach(function(d){
+      if(d.color!==D)return;
+      var dp=pos[d.id];if(!dp)return;
+      var dist=Math.hypot(dp.x-rp.x,dp.y-rp.y);
+      if(dist<near){near=dist;who=d;}
+    });
+    // a defender sitting in the throwing lane is what turns a completion into a pick
+    var qb=qbOf(),lane=1e9;
+    if(qb){
+      var q=pos[qb.id]||{x:qb.x,y:qb.y};
+      players.forEach(function(d){
+        if(d.color!==D||isDL(d))return;
+        var dp=pos[d.id];if(!dp)return;
+        var vx=rp.x-q.x,vy=rp.y-q.y,L2=vx*vx+vy*vy;if(L2<1)return;
+        var u=((dp.x-q.x)*vx+(dp.y-q.y)*vy)/L2;
+        if(u<0.15||u>0.95)return;
+        var px2=q.x+vx*u,py2=q.y+vy*u;
+        var off=Math.hypot(dp.x-px2,dp.y-py2);
+        if(off<lane)lane=off;
+      });
+    }
+    out.push({rec:r,sep:near/YD,lane:lane/YD,cov:who});
+  });
+  out.sort(function(a,b){return b.sep-a.sep;});
+  return out;
+}
+function repProgressionOf(p){
+  var n=null;
+  assigns.forEach(function(a){if(a.pid===p.id&&a.kind==='progression')n=a.role;});
+  return n;
+}
+// the answer a coach would give: the first read that is actually open
+function repBestRead(t){
+  var o=repOpenness(repArrival(t));
+  var byProg=o.slice().sort(function(a,b){
+    var pa=parseInt(repProgressionOf(a.rec)||'9',10),pb=parseInt(repProgressionOf(b.rec)||'9',10);
+    return pa-pb;
+  });
+  for(var i=0;i<byProg.length;i++){
+    if(byProg[i].sep>=3&&byProg[i].lane>=2)return byProg[i];
+  }
+  return o[0]||null;
+}
+
+/* --- a two-high pre-snap picture that rotates to the real call after the snap --- */
+function repDisguise(){
+  var fs=defByLabel('FS')[0],ss=defByLabel('SS')[0];
+  var d=LOS-Math.round(12*YD_V);
+  if(fs){fs.x=Math.round(W*0.32);fs.y=d;}
+  if(ss){ss.x=Math.round(W*0.68);ss.y=d;}
+  var cbs=defByLabel('CB');
+  cbs.forEach(function(c){c.y=LOS-Math.round(7*YD_V);});
+}
+
+var repPin='';        // '' means randomise the look
+function startRep(side,covOverride){
+  stopRep();
+  setTab('reps');
+  var pin=covOverride||repPin;
+  var cov=pin||REPCOV[Math.floor(Math.random()*REPCOV.length)];
+  var press=pin?'':REPPRESS[Math.floor(Math.random()*REPPRESS.length)];
+  saveH();
+  if(side==='off'){
+    if(!curPass)applyPassPlay(Object.keys(PASSPLAY)[Math.floor(Math.random()*Object.keys(PASSPLAY).length)]);
+    var keepPass=curPass;
+    applyCoverage(cov,true);
+    if(press)applyPressure(press,true);
+    applyPassPlay(keepPass);
+    applyCoverage(cov,true);
+    if(press)applyPressure(press,true);
+  }else{
+    var rk=Object.keys(RUNPLAY),pk=Object.keys(PASSPLAY);
+    applyCoverage(cov,true);
+    if(Math.random()<0.45)applyRunPlay(rk[Math.floor(Math.random()*rk.length)]);
+    else{applyPassPlay(pk[Math.floor(Math.random()*pk.length)]);applyCoverage(cov,true);}
+  }
+  repDisguise();
+  rep={side:side,cov:curCov||cov,press:press,concept:(side==='off'?curPass:(curRun||curPass)),t:0,phase:'presnap',
+       clock:REPLEVEL[repLevel].clock,started:0,choice:null,grade:null,
+       defender:side==='def'?repPickDefender():null};
+  focusId=rep.defender?rep.defender.id:null;
+  setAnim(0);renderRep();
+  setTimeout(function(){ if(rep&&rep.phase==='presnap')repSnap(); },1500);
+}
+function repPickDefender(){
+  var pool=players.filter(function(p){
+    return p.color===D&&!isDL(p);
+  });
+  return pool[Math.floor(Math.random()*pool.length)]||null;
+}
+function repSnap(){
+  if(!rep)return;
+  rep.phase='live';rep.started=performance.now();
+  _repRAF=requestAnimationFrame(repTick);
+}
+function repTick(ts){
+  if(!rep||rep.phase!=='live')return;
+  var el=(ts-rep.started)/1000;
+  rep.t=Math.min(1,el/2.6);
+  setAnim(rep.t);
+  renderRep();
+  if(el>=rep.clock){repDecide(null);return;}
+  _repRAF=requestAnimationFrame(repTick);
+}
+function stopRep(){
+  if(_repRAF)cancelAnimationFrame(_repRAF);
+  _repRAF=null;
+}
+function repDecide(choice){
+  if(!rep||rep.phase!=='live')return;
+  stopRep();
+  rep.phase='graded';
+  rep.decidedAt=(performance.now()-rep.started)/1000;
+  if(choice&&choice.rec&&choice.rec.id!=null)choice=choice.rec;   // tolerate an openness row
+  rep.choice=choice;
+  rep.grade=(rep.side==='off')?gradeOffRep():gradeDefRep();
+  var s=repStats();
+  s.n++;if(rep.grade.right)s.right++;
+  s.ms+=Math.round(rep.decidedAt*1000);
+  s.byCov[rep.cov]=s.byCov[rep.cov]||{n:0,right:0};
+  s.byCov[rep.cov].n++;if(rep.grade.right)s.byCov[rep.cov].right++;
+  repSave(s);
+  renderRep();render();
+}
+function covName(k){
+  var o=document.querySelector('#sel-cov option[value="'+k+'"]');
+  return o?o.text:k;
+}
+function gradeOffRep(){
+  var t=rep.t,best=repBestRead(t),o=repOpenness(repArrival(t));
+  var lvl=REPLEVEL[repLevel];
+  if(rep.choice===null)
+    return {right:false,head:'Sacked',why:'You ran out of time. The ball has to be out in '+lvl.clock.toFixed(1)+'s at this level.',best:best};
+  if(rep.choice==='away')
+    return {right:!best||best.sep<3,head:'Threw it away',
+      why:(best&&best.sep>=3)?('You had '+best.rec.label+' open by '+best.sep.toFixed(1)+' yards.'):'Nothing was there. Living to play the next down is a good rep.',best:best};
+  var pick=null;o.forEach(function(x){if(x.rec.id===rep.choice.id)pick=x;});
+  if(!pick)return {right:false,head:'No read',why:'That player was not in the route concept.',best:best};
+  var prog=repProgressionOf(pick.rec);
+  var head,right=false,why;
+  if(pick.lane<1.2){
+    head='Intercepted';
+    why=pick.cov.label+' was sitting in that throwing lane.';
+  }else if(pick.sep>=3){
+    head='Complete';right=true;
+    why=pick.rec.label+' had '+pick.sep.toFixed(1)+' yards on '+pick.cov.label+'.';
+  }else if(pick.sep>=1.8){
+    head='Contested';
+    why='Only '+pick.sep.toFixed(1)+' yards of separation — '+pick.cov.label+' was on top of it.';
+  }else{
+    head='Broken up';
+    why=pick.cov.label+' had him covered by '+pick.sep.toFixed(1)+' yards.';
+  }
+  if(right&&best&&best.rec.id!==pick.rec.id&&best.sep>pick.sep+1.5)
+    why+=' '+best.rec.label+' was the better read at '+best.sep.toFixed(1)+'.';
+  if(prog)why+=' He was your number '+prog+'.';
+  return {right:right,head:head,why:why,best:best,pick:pick};
+}
+/* what this defender's rule actually told him to do */
+function defRuleFor(d){
+  if(play==='run'){
+    var mine=null;
+    assigns.forEach(function(a){if(a.pid===d.id&&a.phase==='run'&&(a.kind==='run'))mine=a;});
+    if(mine)return {answer:mine.role,opts:defRunOptions(mine.role)};
+    var rp=defenderRunPath(d);
+    if(rp)return {answer:'Flow and fill',opts:['Flow and fill','Sit still','Run to the sideline','Blitz the A gap']};
+    return {answer:'Play your gap',opts:['Play your gap','Chase from behind','Drop to the hook','Cover the back']};
+  }
+  var plan=matchPlan(),m=plan[d.id];
+  var a=null;assigns.forEach(function(x){if(x.pid===d.id&&x.kind==='cover')a=x;});
+  var opts=['Stay on top of number one','Carry number two vertical','Sink to the curl',
+            'Drive the flat','Wall number three'];
+  if(!a)return {answer:'Rush the passer',opts:['Rush the passer'].concat(opts)};
+  if(a.targetPid!=null)return {answer:'Run with your man',opts:['Run with your man'].concat(opts)};
+  if(m){
+    if(m.deep)return {answer:'Stay on top of number one',opts:opts};
+    if(m.mode==='trail')return {answer:'Carry number two vertical',opts:opts};
+    if(m.mode==='flat') return {answer:'Drive the flat',opts:opts};
+    if(m.mode==='wall') return {answer:'Wall number three',opts:opts};
+  }
+  if(isDeepRole(a.role))return {answer:'Stay on top of number one',opts:opts};
+  return {answer:'Sink to the curl',opts:opts};
+}
+function defRunOptions(answer){
+  var base=['Spill it','Box it back inside','Fill playside A','Fill playside B','Take the edge','Scrape over the top'];
+  if(base.indexOf(answer)<0)base.unshift(answer);
+  return base.slice(0,6);
+}
+function gradeDefRep(){
+  var d=rep.defender,rule=defRuleFor(d);
+  if(rep.choice===null)
+    return {right:false,head:'Too slow',why:'You have to declare before the ball is out. Your rule was: '+rule.answer+'.'};
+  var right=rep.choice===rule.answer;
+  return {right:right,head:right?'Correct fit':'Wrong fit',
+    why:right?('That is your rule on this call — '+rule.answer+'.')
+             :('You chose "'+rep.choice+'". On this call your rule is: '+rule.answer+'.')};
+}
+
+/* --- the rep panel --- */
+function renderRep(){
+  var el=document.getElementById('rep-body');if(!el)return;
+  var s=repStats();
+  var head=document.getElementById('rep-score');
+  if(head){
+    head.textContent=s.n?((Math.round(s.right/s.n*100))+'% on '+s.n+' rep'+(s.n===1?'':'s')+
+      ' · '+(s.ms/s.n/1000).toFixed(2)+'s average'):'No reps yet';
+  }
+  if(!rep){el.innerHTML='';return;}
+  el.innerHTML='';
+  function row(cls,html){var d=document.createElement('div');d.className=cls;d.innerHTML=html;el.appendChild(d);return d;}
+  var lvl=REPLEVEL[repLevel];
+  if(rep.phase==='presnap'){
+    row('rep-call','<b>'+(rep.side==='off'
+      ? (PASSLABEL[curPass]||'Your call')
+      : (rep.defender?rep.defender.label:'Defence'))+'</b>'+
+      (rep.side==='off'?'Read it out. The look rotates after the snap.'
+                       :'You are the '+(rep.defender?rep.defender.label:'')+'. Play your rule.'));
+    row('rep-clock','Ready…');
+    return;
+  }
+  if(rep.phase==='live'){
+    var left=Math.max(0,lvl.clock-rep.decidedAt0||0);
+    var used=(performance.now()-rep.started)/1000;
+    var rem=Math.max(0,lvl.clock-used);
+    var bar=row('rep-clock','<span>'+rem.toFixed(1)+'s</span>');
+    var m=document.createElement('i');m.style.width=Math.round(rem/lvl.clock*100)+'%';
+    if(rem/lvl.clock<0.34)m.className='hot';
+    bar.appendChild(m);
+    if(rep.side==='off'){
+      row('rep-hint','Tap the receiver you are throwing to.');
+      var b=document.createElement('div');b.className='btnrow';
+      [['Throw it away','away'],['Take the sack',null]].forEach(function(o){
+        var x=document.createElement('button');x.textContent=o[0];
+        x.addEventListener('click',function(){repDecide(o[1]);});
+        b.appendChild(x);
+      });
+      el.appendChild(b);
+    }else{
+      row('rep-hint','What is your job right now?');
+      var rule=defRuleFor(rep.defender);
+      var g=document.createElement('div');g.className='rep-opts';
+      rule.opts.forEach(function(o){
+        var x=document.createElement('button');x.textContent=o;
+        x.addEventListener('click',function(){repDecide(o);});
+        g.appendChild(x);
+      });
+      el.appendChild(g);
+    }
+    return;
+  }
+  // graded
+  var gr=rep.grade;
+  row('rep-result '+(gr.right?'good':'bad'),
+      '<b>'+gr.head+'</b>'+gr.why+
+      '<div class="rep-meta">'+rep.decidedAt.toFixed(2)+'s · '+
+      ((rep.concept&&(PASSLABEL[rep.concept]||rep.concept))||'')+' · '+covName(rep.cov)+
+      (rep.press?(' · '+document.querySelector('#sel-press option[value="'+rep.press+'"]').text):'')+'</div>');
+  if(rep.side==='off'&&gr.best){
+    var o=repOpenness(repArrival(rep.t)).slice(0,4);
+    var t=document.createElement('table');t.className='chk';
+    var hr=document.createElement('tr');
+    ['Receiver','Covered by','Separation'].forEach(function(h){
+      var th=document.createElement('th');th.textContent=h;hr.appendChild(th);});
+    t.appendChild(hr);
+    o.forEach(function(x){
+      var tr=document.createElement('tr');
+      [x.rec.label+(repProgressionOf(x.rec)?(' (#'+repProgressionOf(x.rec)+')'):''),
+       x.cov?x.cov.label:'—',x.sep.toFixed(1)+' yds'].forEach(function(v,i){
+        var td=document.createElement('td');td.textContent=v;
+        if(i===2&&x.sep>=3)td.className='good';
+        tr.appendChild(td);
+      });
+      t.appendChild(tr);
+    });
+    el.appendChild(t);
+  }
+  var again=document.createElement('div');again.className='btnrow';
+  var n=document.createElement('button');n.className='act';n.textContent='Next rep';
+  n.addEventListener('click',function(){startRep(rep.side);});
+  again.appendChild(n);
+  el.appendChild(again);
+}
+
 function applyRunPlay(key){
   if(!key||!RUNPLAY[key])return;
   cardMode='player';
