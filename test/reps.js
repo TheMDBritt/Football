@@ -154,6 +154,94 @@ let fails=0;const chk=(n,c,x)=>{console.log((c?"PASS":"FAIL")+"  "+n+(x!==undefi
       !slow.right&&slow.head==="Too slow"&&/you are /i.test(slow.why), slow.why.slice(0,70));
   await page.evaluate(()=>{window.repLevel="hs";});
 
+  // --- you pick the spot you play and the thing you are drilling ---
+  const posRuns={};
+  for(const pos of ["lb","cb","s","nickel"]){
+    let ok=0,who=[];
+    for(let i=0;i<4;i++){
+      await page.evaluate(p=>{window.repPos=p;window.repSit="";window.repRecog=false;
+        window.startRep("def","3");},pos);
+      await page.waitForFunction(()=>rep&&rep.phase==="live",{timeout:6000});
+      const l=await page.evaluate(()=>rep.defender.label);
+      who.push(l);
+      const want={lb:/^(MIKE|WILL|SAM|JACK)$/,cb:/^CB$/,s:/^(FS|SS)$/,nickel:/^NICK$/}[pos];
+      if(want.test(l))ok++;
+      await page.evaluate(()=>window.repDecide(null));
+    }
+    posRuns[pos]=ok;
+    chk("asking for "+pos+" reps gives you "+pos+" reps", ok===4, who.join(", "));
+  }
+
+  // run fits: the offence has to actually hand it off
+  let runs=0,fits=0;
+  for(let i=0;i<4;i++){
+    await page.evaluate(()=>{window.repPos="lb";window.repSit="run";window.startRep("def","3");});
+    await page.waitForFunction(()=>rep&&rep.phase==="live",{timeout:6000});
+    const r=await page.evaluate(()=>({play:window.play,kind:window.defJobKind(rep.defender)}));
+    if(r.play==="run")runs++;
+    if(r.kind==="fit")fits++;
+    await page.evaluate(()=>window.repDecide(null));
+  }
+  chk("the run-fit drill actually runs the football", runs===4, runs+"/4");
+  chk("and it hands you a run fit to make", fits===4, fits+"/4");
+
+  // pass drops
+  let passes=0;
+  for(let i=0;i<4;i++){
+    await page.evaluate(()=>{window.repPos="lb";window.repSit="pass";window.startRep("def","3");});
+    await page.waitForFunction(()=>rep&&rep.phase==="live",{timeout:6000});
+    if(await page.evaluate(()=>window.play==="pass"))passes++;
+    await page.evaluate(()=>window.repDecide(null));
+  }
+  chk("the pass-drop drill throws it every time", passes===4, passes+"/4");
+
+  // pressure: you are the one coming
+  let hot=0,lanes=[];
+  for(let i=0;i<5;i++){
+    await page.evaluate(()=>{window.repPos="";window.repSit="blitz";window.startRep("def");});
+    await page.waitForFunction(()=>rep&&rep.phase==="live",{timeout:6000});
+    const b=await page.evaluate(()=>({blitz:window.repBlitzing(rep.defender),
+      kind:window.defJobKind(rep.defender),call:window.defCallLine(rep.defender),
+      press:rep.press}));
+    if(b.blitz&&b.kind==="blitz")hot++;
+    lanes.push(b.call);
+    await page.evaluate(()=>window.repDecide(null));
+  }
+  chk("the pressure drill puts you on the blitz", hot===5, hot+"/5 — "+lanes.join(", "));
+  chk("and your lane is named in the huddle call",
+      lanes.every(l=>/blitz|fire/i.test(l)), lanes.join(", "));
+  await page.evaluate(()=>{window.repPos="";window.repSit="";});
+
+  // --- graded in gaps, the way a coach says it ---
+  await page.evaluate(()=>{window.repPos="lb";window.repSit="run";window.startRep("def","3");});
+  await page.waitForFunction(()=>rep&&rep.phase==="live",{timeout:6000});
+  const gap=await page.evaluate(()=>{
+    const t=window.defTruthAt(rep.defender,window.REP_READ);
+    const g=window.frontGaps();
+    // step two gaps away from where he belongs and see if it says so
+    const i=window.nearestGapIndex(g,t.x);
+    const j=Math.max(0,Math.min(g.length-1,i+(i<4?3:-3)));
+    window.repDecide({x:g[j].x,y:window.LOS});
+    return {why:rep.grade.why,mine:rep.grade.mineZone,his:rep.grade.hisZone,
+            right:rep.grade.right};
+  });
+  chk("a blown fit is reported as a gap, not a distance",
+      !!gap.mine&&!!gap.his&&gap.mine!==gap.his&&/gap|edge|alley|deep|box/.test(gap.his),
+      "took "+gap.mine+", had "+gap.his);
+  chk("and the sentence reads like a coach said it",
+      /You fit .+\. You had .+\./.test(gap.why), gap.why.slice(-70));
+
+  await page.evaluate(()=>{window.repPos="lb";window.repSit="run";window.startRep("def","3");});
+  await page.waitForFunction(()=>rep&&rep.phase==="live",{timeout:6000});
+  const same=await page.evaluate(()=>{
+    const t=window.defTruthAt(rep.defender,window.REP_READ);
+    window.repDecide({x:t.x,y:t.y});
+    return {mine:rep.grade.mineZone,his:rep.grade.hisZone,why:rep.grade.why};
+  });
+  chk("fitting the right gap says so", same.mine===same.his&&/Right gap/.test(same.why),
+      same.his);
+  await page.evaluate(()=>{window.repPos="";window.repSit="";});
+
   // --- a real finger on the glass, not just the API ---
   await page.evaluate(()=>{window.repLevel="hs";window.repRecog=false;
     window.applyRunPlay(Object.keys(window.RUNPLAY)[0]);window.startRep("def","3");});

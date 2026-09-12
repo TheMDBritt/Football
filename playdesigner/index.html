@@ -556,6 +556,22 @@ canvas.grabbing{touch-action:none}
                 <option value="pro">Pro — 2.2s</option>
               </select>
             </label>
+            <label class="fld"><span>Play as</span>
+              <select id="sel-reppos">
+                <option value="">Any defender</option>
+                <option value="lb">Linebacker — MIKE / WILL / SAM</option>
+                <option value="nickel">Nickel / apex</option>
+                <option value="cb">Corner</option>
+                <option value="s">Safety</option>
+                <option value="dl">Edge / defensive line</option>
+              </select></label>
+            <label class="fld"><span>Drill</span>
+              <select id="sel-repsit">
+                <option value="">Mix it up</option>
+                <option value="run">Run fits</option>
+                <option value="pass">Pass drops</option>
+                <option value="blitz">Bring pressure</option>
+              </select></label>
             <label class="chk-line"><input type="checkbox" id="chk-recog" checked>
               <span>Pre-snap recognition card first</span></label>
             <div class="btnrow">
@@ -2423,6 +2439,8 @@ document.getElementById('btn-check').addEventListener('click',coverageCheck);
 document.getElementById('btn-rep-off').addEventListener('click',function(){startRep('off');});
 document.getElementById('btn-rep-def').addEventListener('click',function(){startRep('def');});
 document.getElementById('chk-recog').addEventListener('change',function(){repRecog=this.checked;});
+document.getElementById('sel-reppos').addEventListener('change',function(){repPos=this.value;});
+document.getElementById('sel-repsit').addEventListener('change',function(){repSit=this.value;});
 document.getElementById('sel-replevel').addEventListener('change',function(){repLevel=this.value;renderRep();});
 document.getElementById('sel-reppin').addEventListener('change',function(){repPin=this.value;});
 document.getElementById('btn-rep-reset').addEventListener('click',function(){
@@ -4463,6 +4481,10 @@ function supportRoleOf(p){
   if(singleHigh())return 'fill';
   return playside?'alley':'post';
 }
+// the short name for a sentence, and the sentence for the card
+var SUPPORTSHORT={force:'force',spill:'spilling it to the corner',contain:'secondary contain',
+  alley:'the alley fit',fill:'the alley fill from the middle',post:'the backside post',
+  cutback:'the cutback'};
 var SUPPORTWORD={force:'Force — set the edge and turn it back in',
   spill:'Spill it — wrong-arm the kick and force it outside',
   contain:'Secondary contain — stay outside everything',
@@ -5428,6 +5450,24 @@ function draw3You(){
   ctx.lineWidth=3;ctx.strokeStyle='rgba(255,255,255,0.92)';
   ctx.beginPath();pl.forEach(function(p,i){i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y);});
   ctx.closePath();ctx.stroke();
+  // bodies overlap in a crowd, so put a chevron over his helmet as well — nobody
+  // should ever have to work out which one of twenty-two he is supposed to be
+  // Pinned to his drawn body rather than to a height in the world — three yards up
+  // in perspective can land over somebody standing behind him, which is the exact
+  // confusion this is here to remove.
+  var box=null;
+  for(var j2=0;j2<_proj3.length;j2++)if(_proj3[j2].id===id)box=_proj3[j2];
+  if(box&&!box.edge){
+    var k=Math.max(6,Math.min(18,box.h*0.16));
+    var cxP=box.x, cyP=box.y-box.h*1.32-k*0.55;   // above his name tab, not through it
+    ctx.fillStyle='rgba(255,255,255,0.95)';ctx.strokeStyle='rgba(12,22,17,0.8)';
+    ctx.lineWidth=Math.max(1,k*0.14);
+    ctx.beginPath();
+    ctx.moveTo(cxP,cyP+k*0.85);
+    ctx.lineTo(cxP-k*0.70,cyP-k*0.45);
+    ctx.lineTo(cxP+k*0.70,cyP-k*0.45);
+    ctx.closePath();ctx.fill();ctx.stroke();
+  }
   ctx.restore();
 }
 // the rep answer, standing up on the grass
@@ -5635,6 +5675,24 @@ var DEFKINDWORD={fit:'Where are you fitting it?',drop:'Where are you dropping?',
 // how tight a coach would hold you to the spot, in yards. A gap is two yards wide,
 // so a fit is graded tight. A curl zone is not a dot, so a drop gets room.
 var DEFTOL={fit:2.2,blitz:2.2,rush:2.4,man:3.0,drop:4.0};
+// What he knows walking to the line: his call out of the huddle. Never his run fit
+// — that depends on where the ball goes, and that is the part he is being tested on.
+function defCallLine(d){
+  var blitz=null,cov=null;
+  assigns.forEach(function(a){
+    if(a.pid!==d.id)return;
+    if(/blitz|fire/i.test(a.role||''))blitz=a;
+    else if(a.kind==='cover')cov=a;
+  });
+  if(blitz)return blitz.role;
+  if(cov&&cov.targetPid!=null){
+    var m=playerById(cov.targetPid);
+    return 'Man on '+(m?m.label:'your receiver');
+  }
+  if(cov&&cov.role)return cov.role;
+  if(isDL(d))return 'Rush';
+  return 'Base rules';
+}
 // the sentence a coach says on the board
 function defJobLine(d){
   var a=repAssignOf(d);
@@ -5644,7 +5702,7 @@ function defJobLine(d){
   }
   if(a&&a.role)return String(a.role).toLowerCase();
   var sup=supportRoleOf(d);
-  if(sup)return SUPPORTWORD[sup].toLowerCase();
+  if(sup)return SUPPORTSHORT[sup]||SUPPORTWORD[sup].toLowerCase();
   var r=defRuleFor(d);
   return r?String(r.answer).toLowerCase():'play your rule';
 }
@@ -5697,6 +5755,30 @@ function repAnswerRecog(opt){
   setTimeout(function(){ if(rep&&rep.phase==='presnap')repSnap(); },1200);
 }
 
+/* A coach does not say "two point three yards too far outside". He says "you fit
+   B, you had playside A." So a spot on the grass gets named the way it would be
+   named on the board: the gap it sits in, the edge outside the last one, or the
+   alley and the secondary once you are off the line of scrimmage. */
+function fitZoneName(pt){
+  var dep=(LOS-pt.y)/YD_V;                       // yards behind the ball, defence side
+  var g=frontGaps();
+  if(!g.length)return 'the box';
+  var side=(pt.x-ballX)>=0?1:-1;
+  var mine=g.filter(function(q){return q.side===side;});
+  var outer=mine.length?mine.reduce(function(m,q){
+    return Math.abs(q.x-ballX)>Math.abs(m.x-ballX)?q:m;}):null;
+  var pre=(play==='run')?((side===runDir)?'playside ':'backside '):'';
+  if(outer&&Math.abs(pt.x-ballX)>Math.abs(outer.x-ballX)+1.4*YD){
+    if(dep>7)return pre+'deep outside';
+    if(dep>3.2)return pre+'alley';
+    return pre+'edge';
+  }
+  if(dep>9)return 'the deep middle';
+  if(dep>4.5)return 'off the box, '+Math.round(dep)+' yards deep';
+  var near=g[nearestGapIndex(g,pt.x)];
+  return pre+near.k+' gap';
+}
+
 /* --- grading a spot --- */
 function gradeDefRep(){
   var d=rep.defender,truth=defTruthAt(d,REP_READ);
@@ -5725,7 +5807,16 @@ function gradeDefRep(){
   var why='You are '+job+'. ';
   if(right)why+='You put yourself '+dist.toFixed(1)+' yards off the spot — that is inside the frame.';
   else why+='You were '+dist.toFixed(1)+' yards off'+(bits.length?(': '+bits.join(' and ')):'')+'.';
-  return {right:right,head:head,why:why,truth:truth,dist:dist,kind:kind,job:job};
+  // near the line it is a gap, not a distance — say it the way it gets said on the board
+  var mineZ=null,hisZ=null;
+  if(kind==='fit'||kind==='blitz'||kind==='rush'){
+    mineZ=fitZoneName(rep.choice);hisZ=fitZoneName(truth);
+    var word=(kind==='fit')?'fit':'rushed';
+    if(mineZ===hisZ)why+=' Right gap either way — '+hisZ+'.';
+    else why+=' You '+word+' '+mineZ+'. You had '+hisZ+'.';
+  }
+  return {right:right,head:head,why:why,truth:truth,dist:dist,kind:kind,job:job,
+          mineZone:mineZ,hisZone:hisZ};
 }
 
 /* --- the marker that shows a kid where he should have been --- */
@@ -5779,10 +5870,21 @@ function startRep(side,covOverride){
     applyCoverage(cov,true);
     if(press)applyPressure(press,true);
   }else{
+    // What the offence does is the drill. Run fits means they hand it off; pass
+    // drops means they throw it; pressure means you are coming, and the pressure
+    // gets applied last so the blitz survives the coverage refit.
     var rk=Object.keys(RUNPLAY),pk=Object.keys(PASSPLAY);
+    var doRun=(repSit==='run')||(repSit===''&&Math.random()<0.45)||
+              (repSit==='blitz'&&Math.random()<0.35);
     applyCoverage(cov,true);
-    if(Math.random()<0.45)applyRunPlay(rk[Math.floor(Math.random()*rk.length)]);
+    if(doRun)applyRunPlay(rk[Math.floor(Math.random()*rk.length)]);
     else{applyPassPlay(pk[Math.floor(Math.random()*pk.length)]);applyCoverage(cov,true);}
+    if(repSit==='blitz'){
+      var live=['double_a','lb_fire','nickel_fire','fire_zone','cover0'];
+      press=live[Math.floor(Math.random()*live.length)];
+      applyPressure(press,true);
+    }else if(repSit===''&&press)applyPressure(press,true);
+    else press='';
   }
   repDisguise();
   var dfn=side==='def'?repPickDefender():null;
@@ -5797,10 +5899,33 @@ function startRep(side,covOverride){
   setAnim(0);renderRep();
   if(!card)setTimeout(function(){ if(rep&&rep.phase==='presnap')repSnap(); },1500);
 }
+/* A linebacker wants linebacker reps. Handing him the free safety half the time is
+   not a drill, it is a lottery — so you pick the spot you actually play, and what
+   you are working on: fitting a run, dropping on a pass, or bringing pressure. */
+var REPPOS={
+  lb    :function(p){return isBacker(p);},
+  nickel:function(p){return p.label==='NICK';},
+  cb    :function(p){return p.label==='CB';},
+  s     :function(p){return p.label==='FS'||p.label==='SS';},
+  dl    :function(p){return isDL(p);}
+};
+var REPPOSNAME={lb:'linebacker',nickel:'nickel',cb:'corner',s:'safety',dl:'edge'};
+var repPos='',repSit='';
+function repBlitzing(p){
+  return assigns.some(function(a){return a.pid===p.id&&/blitz|fire/i.test(a.role||'');});
+}
 function repPickDefender(){
+  var want=REPPOS[repPos];
   var pool=players.filter(function(p){
-    return p.color===D&&!isDL(p);
+    if(p.color!==D)return false;
+    if(want)return want(p);
+    return !isDL(p);                       // mixed reps stay off the defensive line
   });
+  if(repSit==='blitz'){
+    var hot=pool.filter(repBlitzing);
+    if(hot.length)pool=hot;                // if pressure is on, rep the man who is coming
+  }
+  if(!pool.length)pool=players.filter(function(p){return p.color===D&&!isDL(p);});
   return pool[Math.floor(Math.random()*pool.length)]||null;
 }
 function repSnap(){
@@ -5939,7 +6064,9 @@ function renderRep(){
       ? (PASSLABEL[curPass]||'Your call')
       : (rep.defender?rep.defender.label:'Defence'))+'</b>'+
       (rep.side==='off'?'Read it out. The look rotates after the snap.'
-                       :'You are the '+(rep.defender?rep.defender.label:'')+'. Play your rule.'));
+                       :('You are the '+(rep.defender?rep.defender.label:'')+
+                          '. Your call is <b>'+esc(rep.defender?defCallLine(rep.defender):'')+
+                          '</b>. Run or pass, you find out after the snap.')));
     if(rep.recog)row('rep-recog '+(rep.recogRight?'good':'bad'),
       (rep.recogRight?'Right — ':'No — ')+esc(rep.recog.answer)+'.');
     row('rep-clock','Ready…');
@@ -5982,9 +6109,11 @@ function renderRep(){
       (rep.press?(' · '+document.querySelector('#sel-press option[value="'+rep.press+'"]').text):'')+'</div>');
   if(rep.side==='def'&&gr.truth){
     var t2=document.createElement('table');t2.className='chk';
-    [['Your job',gr.job||defJobLine(rep.defender)],
-     ['Missed by',(gr.dist!=null?gr.dist.toFixed(1)+' yds':'never declared')],
-     ['Coached to',(DEFTOL[gr.kind]||3).toFixed(1)+' yds']].forEach(function(r2){
+    var rows=[['Your job',gr.job||defJobLine(rep.defender)]];
+    if(gr.hisZone)rows.push(['You had',gr.hisZone],['You took',gr.mineZone||'—']);
+    rows.push(['Missed by',(gr.dist!=null?gr.dist.toFixed(1)+' yds':'never declared')],
+              ['Coached to',(DEFTOL[gr.kind]||3).toFixed(1)+' yds']);
+    rows.forEach(function(r2){
       var tr=document.createElement('tr');
       var th=document.createElement('th');th.textContent=r2[0];tr.appendChild(th);
       var td=document.createElement('td');td.textContent=r2[1];tr.appendChild(td);
