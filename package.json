@@ -1,9 +1,9 @@
 {
   "name": "football-playdesigner",
   "private": true,
-  "description": "Coach's Play Designer — a single-file play/formation diagramming tool.",
+  "description": "Coach's Play Designer \u2014 a single-file play/formation diagramming tool.",
   "scripts": {
-    "test": "node test/verify.js && node test/week-flow.js && node test/browser-boot.js && node test/reps.js"
+    "test": "node test/verify.js && node test/week-flow.js && node test/browser-boot.js && node test/reps.js && node test/three-d.js"
   },
   "devDependencies": {
     "canvas": "^3.2.3",

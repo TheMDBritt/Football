@@ -361,7 +361,7 @@ chk("previewing a saved play does not corrupt the live document",
     w.players.length===liveCount && w.ballX===liveBall);
 
 chk("canvas allows vertical panning by default", /touch-action:pan-y/.test(html));
-chk("touchmove ignores non-manipulating gestures", /touchmove[\s\S]{0,400}pointerBusy\(\)\)return/.test(html));
+chk("touchmove ignores non-manipulating gestures", /touchmove[\s\S]{0,800}pointerBusy\(\)\)return/.test(html));
 chk("canvas is keyboard focusable", /id="c" tabindex="0"/.test(html));
 chk("service worker and manifest are wired", /register\(.sw\.js.\)/.test(html) && /rel="manifest"/.test(html));
 chk("offline shell files exist",

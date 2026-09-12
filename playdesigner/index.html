@@ -247,6 +247,11 @@ canvas.grabbing{touch-action:none}
   padding:9px 0 13px;border-bottom:3px solid var(--rule-2)}
 .rep-clock i{position:absolute;left:0;bottom:-3px;height:3px;background:var(--ink);display:block}
 .rep-clock i.hot{background:var(--danger)}
+#bar3d{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:8px 2px 0}
+#bar3d[hidden]{display:none}
+.fld3{display:flex;align-items:center;gap:7px;font-size:12.5px;color:var(--ink-2)}
+.fld3 select{font:inherit;padding:4px 6px;border:1px solid var(--rule-2);background:var(--sheet);color:var(--ink)}
+.hint3{font-size:11.5px;color:var(--ink-3)}
 .rep-hint{font-size:12.5px;color:var(--ink-3)}
 .rep-recog{font-size:12.5px;padding:7px 10px;border-left:3px solid var(--ink-3);background:var(--sheet)}
 .rep-recog.good{border-left-color:#2E6B41}
@@ -335,6 +340,18 @@ canvas.grabbing{touch-action:none}
     <section id="stage">
       <div id="call-strip" aria-live="polite"></div>
       <div id="wrap"><canvas id="c" tabindex="0" role="application" aria-label="Play diagram. Arrow keys move between players, shift and arrow nudges, Enter assigns."></canvas></div>
+      <div id="bar3d" hidden>
+        <label class="fld3"><span>Camera</span>
+          <select id="sel-cam3">
+            <option value="endzone">End zone</option>
+            <option value="allXXII">All-22</option>
+            <option value="sideline">Sideline</option>
+            <option value="player">Player view — first person</option>
+          </select></label>
+        <label class="chk-line"><input type="checkbox" id="chk-ghost">
+          <span>See through bodies</span></label>
+        <span class="hint3">Drag to look around · scroll to zoom · player view uses <b>Show one player</b> on the Teach tab</span>
+      </div>
       <div id="ctrls">
         <button id="btn-play" class="primary" title="Watch the play run">&#9654; Play it</button>
         <button id="btn-reset" title="Put everyone back on the line">Back to start</button>
@@ -495,6 +512,7 @@ canvas.grabbing{touch-action:none}
               <button id="t-erase">Erase</button>
             </div>
             <div class="btnrow">
+              <button id="btn-3d" title="Stand the play up — watch it in 3D from any angle, or through a player&apos;s eyes">3D</button>
               <button id="btn-defview" title="Look at it from the defence&apos;s side">Flip sides</button>
               <button id="btn-boxview" title="Hide receivers and defensive backs — front only">Front only</button>
               <button id="btn-snap" title="Line players up on half-yard marks while you drag">Grid</button>
@@ -614,6 +632,24 @@ var C=document.getElementById('c'),ctx=C.getContext('2d');
 var W,H,YD,YD_V,LOS,LH_X,RH_X,hashPos,SL_WR,SLOT_IN,QB_Y,RB_Y;
 var OL_G=22,OL_T=22;
 var ballX=0,play='pass',defView=false,boxView=false,curCov='',curForm='',flip=false,curFront='',curPress='';
+// 3D view state. restoreSession() and loadForm() both run long before the 3D
+// renderer is defined, and a returning user can come back with 3D switched on, so
+// these live up here with the other view flags rather than next to their drawing code.
+var view3d=false, cam3Mode='endzone', ghost3=false;
+var cam3={yaw:0,pitch:0.56,dist:31,lookYaw:0,lookPitch:0,auto:true};
+var _cam3=null, _proj3=[], orbit3=null;
+var NEAR3=0.28, FWIDE=26.67;          // near plane, and half the width of the field
+
+// The angles the copies are actually shot from: end zone off a lift behind the
+// ball, the sideline copy off a platform at midfield, All-22 from the press box
+// roof — high enough that fifty-three yards of width stops stacking up on itself.
+var CAM3={
+  endzone :{name:'End zone',  yaw:0,     pitch:0.50, dist:31, fov:1.10},
+  allXXII :{name:'All-22',    yaw:-1.52, pitch:0.74, dist:48, fov:1.00},
+  sideline:{name:'Sideline',  yaw:-1.52, pitch:0.34, dist:38, fov:0.90},
+  player  :{name:'Player view (first person)', fov:1.28}
+};
+
 var players=[],routes=[],hist=[],assigns=[],zones=[];
 var uid=0;function nextId(){return ++uid;}
 var tool='assign',drawing=false,curPts=[],dragIdx=-1,dragOff={x:0,y:0},arcStart=null,dragAssign=-1,dragMode='move',zoneDrag=null,stemDrag=-1,lastClient={x:0,y:0},lastTap=0,routeAnchorId=null;
@@ -837,6 +873,7 @@ function render(){
   _placedTags=[];buildNeighbours();
   ctx.setTransform(DPR,0,0,DPR,0,0);
   ctx.clearRect(0,0,W,H);
+  if(view3d){draw3D();return renderTail();}
   ctx.translate(viewX,viewY);ctx.scale(viewScale,viewScale);
   ctx.save();if(defView){ctx.translate(0,H);ctx.scale(1,-1);}
   drawField();
@@ -898,6 +935,9 @@ function render(){
   }
   drawRepDef();
   ctx.restore();
+  renderTail();
+}
+function renderTail(){
   if(recording)drawRecBanner();
   callStrip();refreshPassMenu();fillPlayerSelect();renderCard();
   if(_ready)scheduleSave();
@@ -1314,6 +1354,9 @@ document.getElementById('sel-hash').addEventListener('change',function(){
 ['assign','route','erase'].forEach(function(t){
   document.getElementById('t-'+t).addEventListener('click',function(){setTool(t);});
 });
+document.getElementById('btn-3d').addEventListener('click',function(){set3D(!view3d);});
+document.getElementById('sel-cam3').addEventListener('change',function(){set3Mode(this.value);});
+document.getElementById('chk-ghost').addEventListener('change',function(){ghost3=this.checked;render();});
 document.getElementById('btn-defview').addEventListener('click',function(){defView=!defView;this.classList.toggle('act',defView);render();});
 document.getElementById('btn-boxview').addEventListener('click',function(){boxView=!boxView;this.classList.toggle('act',boxView);render();});
 
@@ -1346,9 +1389,9 @@ document.getElementById('tb-search').addEventListener('input',function(){
 
 function gp(e){
   var r=C.getBoundingClientRect(),s=e.touches?e.touches[0]:e;
-  var x=((s.clientX-r.left)*(W/r.width)-viewX)/viewScale;
-  var t=((s.clientY-r.top)*(H/r.height)-viewY)/viewScale;
-  return{x:x,y:defView?H-t:t};
+  var sx=(s.clientX-r.left)*(W/r.width), sy=(s.clientY-r.top)*(H/r.height);
+  var x=(sx-viewX)/viewScale, t=(sy-viewY)/viewScale;
+  return{x:x,y:defView?H-t:t,sx:sx,sy:sy};
 }
 function hitP(x,y){
   var r=hitRadius();
@@ -1390,6 +1433,26 @@ function hitR(x,y){
   }return -1;
 }
 function onDown(pos){
+  if(view3d){
+    if(rep&&rep.phase==='live'){
+      if(rep.side==='off'){
+        var h3=hit3(pos.sx,pos.sy,function(q){return q.color===O&&!isOL(q);});
+        var tp=h3!=null?playerById(h3):null;
+        if(tp)repDecide(tp);
+      }else{
+        var g3=pick3(pos.sx,pos.sy);
+        if(g3)repDecide({x:g3.x,y:g3.y});      // you tapped the grass you are fitting
+      }
+      return;
+    }
+    var h4=hit3(pos.sx,pos.sy);
+    if(h4!=null&&cam3Mode!=='player'){focusId=(focusId===h4)?null:h4;
+      var sp=document.getElementById('sel-player');if(sp)sp.value=focusId||'';
+      render();return;}
+    orbit3={sx:pos.sx,sy:pos.sy,yaw:cam3.yaw,pitch:cam3.pitch,
+            ly:cam3.lookYaw,lp:cam3.lookPitch};
+    return;
+  }
   if(rep&&rep.phase==='live'){
     if(rep.side==='off'){
       var ri=hitPAnim(pos.x,pos.y);
@@ -1424,6 +1487,17 @@ function onDown(pos){
   if(tool==='route')curPts=[pos];
 }
 function onMove(pos){
+  if(orbit3){
+    var dx=(pos.sx-orbit3.sx)/W, dy=(pos.sy-orbit3.sy)/H;
+    if(cam3Mode==='player'){
+      cam3.lookYaw=orbit3.ly-dx*1.9;
+      cam3.lookPitch=Math.max(-0.5,Math.min(0.6,orbit3.lp+dy*1.2));
+    }else{
+      cam3.yaw=orbit3.yaw-dx*3.4;
+      cam3.pitch=Math.max(0.02,Math.min(1.40,orbit3.pitch+dy*2.2));
+    }
+    paint();return;
+  }
   if(dragIdx>=0){var nx=pos.x-dragOff.x,ny=pos.y-dragOff.y;
     if(snapOn){var gx=YD/2,gy=YD_V/2;nx=Math.round(nx/gx)*gx;ny=LOS+Math.round((ny-LOS)/gy)*gy;}
     players[dragIdx].x=nx;players[dragIdx].y=ny;updateDTLabel(players[dragIdx]);paint();return;}
@@ -1449,6 +1523,7 @@ function onMove(pos){
   }
 }
 function onUp(pos){
+  if(orbit3){orbit3=null;return;}
   if(dragIdx>=0){commitEdit();dragIdx=-1;render();return;}
   if(dragAssign>=0){
     var dd=assigns[dragAssign];
@@ -1502,11 +1577,18 @@ function clampViewScale(v){viewScale=Math.max(1,Math.min(4,v));}
 function resetView(){viewScale=1;viewX=0;viewY=0;render();}
 function screenPt(e){var r=C.getBoundingClientRect();return{x:(e.clientX-r.left)*(W/r.width),y:(e.clientY-r.top)*(H/r.height)};}
 C.addEventListener('wheel',function(e){
+  if(view3d){
+    e.preventDefault();
+    if(cam3Mode==='player')return;                   // you cannot zoom your own eyes
+    cam3.auto=false;
+    cam3.dist=Math.max(9,Math.min(90,cam3.dist*(e.deltaY<0?1/1.12:1.12)));
+    paint();return;
+  }
   if(!e.ctrlKey&&!e.metaKey&&viewScale===1)return;   // plain wheel still scrolls the page
   e.preventDefault();var p=screenPt(e);
   zoomAt(p.x,p.y,e.deltaY<0?1.12:1/1.12);
 },{passive:false});
-function pointerBusy(){return dragIdx>=0||dragAssign>=0||stemDrag>=0||zoneDrag||drawing;}
+function pointerBusy(){return dragIdx>=0||dragAssign>=0||stemDrag>=0||zoneDrag||drawing||!!orbit3;}
 // listen on window so releasing outside the canvas ends the drag instead of stranding it
 window.addEventListener('mousemove',function(e){if(!pointerBusy())return;onMove(gp(e));});
 window.addEventListener('mouseup',function(e){if(!pointerBusy())return;onUp(gp(e));});
@@ -1536,7 +1618,12 @@ C.addEventListener('touchmove',function(e){
     e.preventDefault();
     var a=e.touches[0],b=e.touches[1];
     var d=Math.hypot(a.clientX-b.clientX,a.clientY-b.clientY);
-    if(_pinch.d>0)zoomAt(_pinch.x,_pinch.y,d/_pinch.d);
+    if(_pinch.d>0){
+      if(view3d){
+        if(cam3Mode!=='player'){cam3.auto=false;
+          cam3.dist=Math.max(9,Math.min(90,cam3.dist*_pinch.d/d));paint();}
+      }else zoomAt(_pinch.x,_pinch.y,d/_pinch.d);
+    }
     _pinch.d=d;return;
   }
   if(!pointerBusy())return;e.preventDefault();onMove(gp(e));
@@ -1802,7 +1889,7 @@ var SKEY='cpd_session';
 function saveSession(){
   try{
     localStorage.setItem(SKEY,JSON.stringify({
-      ballX:ballX,play:play,defView:defView,flip:flip,
+      ballX:ballX,play:play,defView:defView,flip:flip,view3d:view3d,cam3Mode:cam3Mode,
       curForm:curForm,curFront:curFront,curPress:curPress,curCov:curCov,curRun:curRun,runDir:runDir,curPass:curPass,curDefPers:curDefPers,fitGroup:fitGroup,
       players:players,routes:routes,assigns:assigns,zones:zones
     }));
@@ -1815,6 +1902,8 @@ function restoreSession(){
   if(typeof raw.ballX==='number')ballX=raw.ballX;
   players=raw.players;routes=raw.routes||[];assigns=raw.assigns||[];zones=raw.zones||[];
   play=raw.play||'pass';defView=!!raw.defView;flip=!!raw.flip;
+  view3d=!!raw.view3d;
+  if(raw.cam3Mode&&CAM3[raw.cam3Mode])cam3Mode=raw.cam3Mode;
   curForm=raw.curForm||'';curFront=raw.curFront||'';curPress=raw.curPress||'';curCov=raw.curCov||'';
   curRun=raw.curRun||'';runDir=raw.runDir||1;curPass=raw.curPass||'';curDefPers=raw.curDefPers||'nickel';
   fitGroup=Array.isArray(raw.fitGroup)?raw.fitGroup:[];
@@ -1824,6 +1913,7 @@ function restoreSession(){
   // reflect restored state in the toolbar controls
   document.getElementById('sel-form').value=curForm;
   document.getElementById('sel-play').value=play;
+  var c3=document.getElementById('sel-cam3');if(c3)c3.value=cam3Mode;
   syncToggles();
   return true;
 }
@@ -2298,6 +2388,8 @@ function setTool(t){
   syncToggles();
 }
 function syncToggles(){
+  var b3=document.getElementById('btn-3d');if(b3)b3.classList.toggle('act',view3d);
+  var bar3=document.getElementById('bar3d');if(bar3)bar3.hidden=!view3d;
   var m={'btn-defview':defView,'btn-boxview':boxView,'btn-flip':flip,'btn-snap':snapOn,
          'btn-3way':(typeof fitGroup!=='undefined'&&fitGroup&&fitGroup.length>=2)};
   Object.keys(m).forEach(function(id){var b=document.getElementById(id);if(b)b.classList.toggle('act',!!m[id]);});
@@ -4835,6 +4927,584 @@ function markSnifferFits(dir){
   }
 }
 
+/* ================= 3D VIEW =================
+   The same play, stood up. A diagram teaches a coach; a picture from inside the
+   helmet teaches a player, because that is the only angle he will ever actually
+   have. So this is a small hand-rolled perspective renderer — no libraries, the
+   file still runs off a memory stick in a field house — over the exact same
+   players, paths and coverage the 2D card is built from. Nothing is duplicated:
+   if the simulator moves a man, he moves here too.
+
+   World is in yards. X runs across the field with zero at the middle, Y is up,
+   Z runs downfield with zero on the line of scrimmage, so the offence starts at
+   negative Z and plays toward positive Z. */
+function eyeOf(p){                     // a helmet sits about six feet off the grass
+  var w=world3(px(p),py(p));
+  return {x:w.x,y:1.78,z:w.z};
+}
+function world3(fx,fy){return {x:(fx-W/2)/YD, z:(LOS-fy)/YD_V};}
+function field3(wx,wz){return {x:W/2+wx*YD, y:LOS-wz*YD_V};}
+
+// who the camera belongs to in player view, and what he is looking at
+function repFocusPlayer(){
+  var p=focusId?playerById(focusId):null;
+  if(p)return p;
+  if(rep&&rep.defender)return rep.defender;
+  return qbOf()||players[0];
+}
+function lookTargetFor(p){
+  if(!p)return {x:0,y:1.2,z:8};
+  if(p.color===D){                     // a defender's eyes go to the football
+    var bp=animBallPos(animT);
+    if(bp){var wb=world3(bp.x,bp.y);return {x:wb.x,y:0.8,z:wb.z};}
+    var q=qbOf();
+    if(q){var wq=world3(px(q),py(q));return {x:wq.x,y:0.8,z:wq.z};}
+    return {x:0,y:0.8,z:-4};
+  }
+  // the quarterback works the middle of the coverage; everybody else looks downfield
+  var me=world3(px(p),py(p));
+  return {x:me.x*0.35,y:0.55,z:me.z+13};
+}
+
+function buildCam3(){
+  var pre=CAM3[cam3Mode]||CAM3.endzone, fov=pre.fov||0.98;
+  var F=(H/2)/Math.tan(fov/2);
+  if(cam3Mode==='player'){
+    var me=repFocusPlayer();
+    var e=me?eyeOf(me):{x:0,y:1.78,z:-6};
+    var tg=lookTargetFor(me);
+    if(me&&me.color===D){
+      // Back off his own shoulder and get up a little, so his drop, his gap and the
+      // ball are all in one frame instead of half of them being behind his head.
+      // Anchored to HIM, not to the ball, so he stays the same size in the shot
+      // whether he is a stacked backer or a corner out on the boundary.
+      var ux=tg.x-e.x,uz=tg.z-e.z,uL=Math.hypot(ux,uz)||1;
+      ux/=uL;uz/=uL;
+      var anchor={x:e.x,z:e.z};
+      e={x:anchor.x-ux*7.0,y:4.6,z:anchor.z-uz*7.0};
+      tg={x:anchor.x+ux*6.0,y:0.4,z:anchor.z+uz*6.0};
+    }
+    var vx=tg.x-e.x,vy=tg.y-e.y,vz=tg.z-e.z,L=Math.hypot(vx,vy,vz)||1;
+    _cam3={x:e.x,y:e.y,z:e.z,F:F,cx:W/2,cy0:H/2,who:(me&&me.color!==D)?me.id:null,
+      yaw:Math.atan2(vx,vz)+cam3.lookYaw,
+      pitch:Math.max(-0.55,Math.min(0.80,-Math.asin(vy/L)+0.20+cam3.lookPitch))};
+    return;
+  }
+  // Orbit around the middle of the bodies, not around a fixed spot — an empty
+  // half of the frame is wasted film. Then back the camera off until all twenty-two
+  // are inside the margins, the way a cameraman frames the shot before the snap.
+  var bx=[],bz=[];
+  players.forEach(function(p){var w=world3(px(p),py(p));bx.push(w.x);bz.push(w.z);});
+  if(!bx.length){bx=[0];bz=[0];}
+  var t={x:(Math.min.apply(null,bx)+Math.max.apply(null,bx))/2,y:0.9,
+         z:(Math.min.apply(null,bz)+Math.max.apply(null,bz))/2};
+  var yaw=cam3.yaw,pitch=cam3.pitch;
+  if(defView)yaw+=Math.PI;             // "flip sides" walks the camera to the other end
+  var cp=Math.cos(pitch),sp=Math.sin(pitch);
+  function place(d){
+    _cam3={x:t.x-d*Math.sin(yaw)*cp, y:t.y+d*sp, z:t.z-d*Math.cos(yaw)*cp,
+           yaw:yaw,pitch:pitch,F:F,cx:W/2,cy0:H/2,who:null};
+  }
+  if(cam3.auto){
+    var lo=11,hi=95;
+    for(var i=0;i<14;i++){
+      var mid=(lo+hi)/2;place(mid);
+      if(fits3())hi=mid;else lo=mid;    // closer if it already fits, further if it does not
+    }
+    cam3.dist=hi;
+  }
+  place(cam3.dist);
+  // Then shift the frame — a lens shift, not a tilt, so the geometry stays honest —
+  // until the bodies sit in the middle of the shot instead of up against one edge.
+  if(cam3.auto){
+    var bb=bodyBox3();
+    if(bb){
+      _cam3.cx +=Math.max(-W*0.30,Math.min(W*0.30,W*0.50-(bb.x0+bb.x1)/2));
+      _cam3.cy0+=Math.max(-H*0.34,Math.min(H*0.34,H*0.53-(bb.y0+bb.y1)/2));
+    }
+  }
+}
+// where the twenty-two actually land on screen
+function bodyBox3(){
+  var x0=1e9,x1=-1e9,y0=1e9,y1=-1e9,n=0;
+  players.forEach(function(p){
+    var w=world3(px(p),py(p));
+    var a=proj3(camSpace3(w.x,0,w.z)),b=proj3(camSpace3(w.x,2.0,w.z));
+    if(!a||!b)return;
+    n++;x0=Math.min(x0,a.x);x1=Math.max(x1,a.x);y0=Math.min(y0,b.y);y1=Math.max(y1,a.y);
+  });
+  return n?{x0:x0,x1:x1,y0:y0,y1:y1}:null;
+}
+// Frame on the bodies, not on the field: pull in until all twenty-two fill the
+// shot, and stop the moment either edge of the pile reaches the margins.
+function fits3(){
+  for(var i=0;i<players.length;i++){
+    var p=players[i],w=world3(px(p),py(p));
+    if(!proj3(camSpace3(w.x,0,w.z))||!proj3(camSpace3(w.x,2.0,w.z)))return false;
+  }
+  var bb=bodyBox3();if(!bb)return false;
+  return (bb.x1-bb.x0)<=W*0.88 && (bb.y1-bb.y0)<=H*0.84;
+}
+function camSpace3(x,y,z){
+  var c=_cam3,dx=x-c.x,dy=y-c.y,dz=z-c.z;
+  var cy=Math.cos(c.yaw),sy=Math.sin(c.yaw),cp=Math.cos(c.pitch),sp=Math.sin(c.pitch);
+  var x1=dx*cy-dz*sy, z1=dx*sy+dz*cy;
+  return {x:x1, y:dy*cp+z1*sp, z:-dy*sp+z1*cp};
+}
+function proj3(c){
+  if(!c||c.z<NEAR3*0.999)return null;
+  return {x:_cam3.cx+_cam3.F*c.x/c.z, y:_cam3.cy0-_cam3.F*c.y/c.z, z:c.z};
+}
+function pt3(x,y,z){return proj3(camSpace3(x,y,z));}
+// clip a polygon to the near plane so geometry behind you does not fold inside out
+function poly3(pts){
+  var out=[];
+  for(var i=0;i<pts.length;i++){
+    var a=pts[i],b=pts[(i+1)%pts.length],ai=a.z>=NEAR3,bi=b.z>=NEAR3;
+    if(ai)out.push(a);
+    if(ai!==bi){
+      var t=(NEAR3-a.z)/(b.z-a.z);
+      out.push({x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t,z:NEAR3});
+    }
+  }
+  return out.map(proj3).filter(Boolean);
+}
+function fillQuad3(q,style){
+  var pl=poly3(q.map(function(p){return camSpace3(p[0],p[1],p[2]);}));
+  if(pl.length<3)return;
+  ctx.fillStyle=style;ctx.beginPath();
+  pl.forEach(function(p,i){i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y);});
+  ctx.closePath();ctx.fill();
+}
+// a stripe of chalk on the grass, drawn with real width so it thins with distance
+function chalk3(x1,z1,x2,z2,wid,style){
+  var dx=x2-x1,dz=z2-z1,L=Math.hypot(dx,dz)||1,nx=-dz/L*wid/2,nz=dx/L*wid/2;
+  fillQuad3([[x1+nx,0.01,z1+nz],[x2+nx,0.01,z2+nz],[x2-nx,0.01,z2-nz],[x1-nx,0.01,z1-nz]],style);
+}
+// a path painted on the grass — routes, blocks, fits
+function ground3(pts,col,wid,dash){
+  var cs=pts.map(function(p){var w=world3(p.x,p.y);return camSpace3(w.x,0.03,w.z);});
+  var minZ=(cam3Mode==='player')?5.5:NEAR3;
+  if(cam3Mode==='player'&&cs.every(function(c){return c.z<minZ;}))return;
+  ctx.strokeStyle=col;ctx.lineJoin='round';ctx.lineCap='round';
+  if(dash)ctx.setLineDash(dash);
+  for(var i=0;i<cs.length-1;i++){
+    var a=cs[i],b=cs[i+1];
+    if(a.z<NEAR3&&b.z<NEAR3)continue;
+    if(a.z<NEAR3){var t=(NEAR3-a.z)/(b.z-a.z);a={x:a.x+(b.x-a.x)*t,y:a.y+(b.y-a.y)*t,z:NEAR3};}
+    else if(b.z<NEAR3){var u=(NEAR3-b.z)/(a.z-b.z);b={x:b.x+(a.x-b.x)*u,y:b.y+(a.y-b.y)*u,z:NEAR3};}
+    var pa=proj3(a),pb=proj3(b);if(!pa||!pb)continue;
+    ctx.lineWidth=Math.max(1,wid*_cam3.F/((a.z+b.z)*0.5)/YD*0.5);
+    ctx.beginPath();ctx.moveTo(pa.x,pa.y);ctx.lineTo(pb.x,pb.y);ctx.stroke();
+  }
+  ctx.setLineDash([]);
+  // arrow head, flat on the grass
+  var n=pts.length;
+  if(n>1){
+    var wA=world3(pts[n-2].x,pts[n-2].y),wB=world3(pts[n-1].x,pts[n-1].y);
+    if(camSpace3(wB.x,0.03,wB.z).z<minZ)return;
+    var ang=Math.atan2(wB.z-wA.z,wB.x-wA.x),hl=1.05;
+    var tri=[[wB.x,0.03,wB.z],
+      [wB.x-hl*Math.cos(ang-0.45),0.03,wB.z-hl*Math.sin(ang-0.45)],
+      [wB.x-hl*Math.cos(ang+0.45),0.03,wB.z-hl*Math.sin(ang+0.45)]];
+    fillQuad3(tri,col);
+  }
+}
+
+/* --- the field --- */
+function draw3Field(){
+  var hz=_cam3.cy0-_cam3.F*Math.tan(_cam3.pitch);
+  if(!isFinite(hz))hz=H*0.4;
+  // sky, then the ground beyond the field
+  var sky=ctx.createLinearGradient(0,0,0,Math.max(1,hz));
+  sky.addColorStop(0,'#BFD6E6');sky.addColorStop(1,'#E6EDF0');
+  ctx.fillStyle=sky;ctx.fillRect(0,0,W,Math.max(0,hz));
+  ctx.fillStyle='#31552A';ctx.fillRect(0,Math.max(0,hz),W,H-Math.max(0,hz));
+  // mown five-yard bands, the way a field house crew cuts it
+  var Z0=-45,Z1=70;
+  for(var z=Z0;z<Z1;z+=5){
+    var idx=Math.round(z/5);
+    fillQuad3([[-FWIDE,0,z],[FWIDE,0,z],[FWIDE,0,z+5],[-FWIDE,0,z+5]],
+      (((idx%2)+2)%2===0)?'#3E7132':'#356028');
+  }
+  // grass keeps going past anything you can pick a stripe out of, so the far end
+  // fades into the horizon instead of stopping at a visible edge
+  fillQuad3([[-FWIDE,0,Z1],[FWIDE,0,Z1],[FWIDE,0,260],[-FWIDE,0,260]],'#3A6A2E');
+  fillQuad3([[-FWIDE,0,-260],[FWIDE,0,-260],[FWIDE,0,Z0],[-FWIDE,0,Z0]],'#3A6A2E');
+  // sideline borders
+  fillQuad3([[-FWIDE-3.5,0,-400],[-FWIDE,0,-400],[-FWIDE,0,400],[-FWIDE-3.5,0,400]],'#2E5326');
+  fillQuad3([[FWIDE,0,-400],[FWIDE+3.5,0,-400],[FWIDE+3.5,0,400],[FWIDE,0,400]],'#2E5326');
+  chalk3(-FWIDE,-400,-FWIDE,400,0.4,'rgba(255,255,255,0.72)');
+  chalk3( FWIDE,-400, FWIDE,400,0.4,'rgba(255,255,255,0.72)');
+  // yard lines every five, hashes every one
+  for(var y=Z0;y<=150;y+=5)
+    chalk3(-FWIDE,y,FWIDE,y,0.14,'rgba(255,255,255,0.52)');
+  var hx=(W/2-LH_X)/YD;                              // high-school hash, off the middle
+  for(var t=Z0;t<=Z1;t++){
+    chalk3(-hx-0.33,t,-hx+0.33,t,0.12,'rgba(255,255,255,0.46)');
+    chalk3( hx-0.33,t, hx+0.33,t,0.12,'rgba(255,255,255,0.46)');
+  }
+  // the line of scrimmage, in chalk you can see from the huddle
+  chalk3(-FWIDE,0,FWIDE,0,0.26,'rgba(255,255,255,0.90)');
+  draw3Surround();
+  // haze where the grass meets the sky, so the far end does not end in a hard edge
+  if(hz>0&&hz<H){
+    var hazeH=Math.max(6,H*0.055);
+    var hz2=ctx.createLinearGradient(0,hz,0,hz+hazeH);
+    hz2.addColorStop(0,'rgba(214,226,232,0.85)');hz2.addColorStop(1,'rgba(214,226,232,0)');
+    ctx.fillStyle=hz2;ctx.fillRect(0,hz,W,hazeH);
+  }
+}
+
+/* A field is a place. Without a wall and a set of bleachers behind it you get a
+   green rectangle floating under an empty sky, and from inside a helmet — where
+   half the frame is horizon — that is most of what you would be looking at. */
+function draw3Surround(){
+  var Z0=-130,Z1=175, wallIn=FWIDE+4.5, seatOut=FWIDE+30;
+  [-1,1].forEach(function(sg){
+    var xi=sg*wallIn, xo=sg*seatOut;
+    // bleachers, raked back and up off the wall
+    fillQuad3([[xi,1.1,Z0],[xo,16,Z0],[xo,16,Z1],[xi,1.1,Z1]],'#8C939D');
+    for(var r=0.12;r<1;r+=0.12){       // rows, so the rake reads as seating
+      var y1=1.1+14.9*r, x1=xi+(xo-xi)*r;
+      chalkWall(x1,y1,Z0,Z1,sg,'rgba(30,36,44,0.20)');
+    }
+    // the wall at the back of the bench area
+    fillQuad3([[xi,0,Z0],[xi,1.15,Z0],[xi,1.15,Z1],[xi,0,Z1]],'#59616B');
+    fillQuad3([[sg*(FWIDE+3.5),0,Z0],[xi,0,Z0],[xi,0,Z1],[sg*(FWIDE+3.5),0,Z1]],'#2B4B24');
+  });
+  // something to stop the eye at each end
+  [[Z0,'#7E858F'],[Z1,'#7E858F']].forEach(function(e){
+    fillQuad3([[-seatOut,0,e[0]],[seatOut,0,e[0]],[seatOut,15,e[0]],[-seatOut,15,e[0]]],e[1]);
+  });
+}
+function chalkWall(x,y,z0,z1,sg,col){
+  fillQuad3([[x,y,z0],[x,y+0.12,z0],[x,y+0.12,z1],[x,y,z1]],col);
+}
+
+/* --- the play art, laid flat on the grass --- */
+function draw3Art(){
+  if(rep&&rep.phase==='live')return;                 // in a rep you read bodies, not paint
+  var a=(animT!=null)?0.30:0.92;
+  if(cam3Mode==='player')a*=0.55;                    // from inside a helmet it is a hint
+  ctx.save();ctx.globalAlpha=a;
+  zones.forEach(function(zn){
+    var w=world3(zn.x,zn.y),rx=(zn.rx||40)/YD,rz=(zn.ry||40)/YD_V,ring=[];
+    for(var i=0;i<24;i++){var th=i/24*Math.PI*2;
+      ring.push(camSpace3(w.x+Math.cos(th)*rx,0.02,w.z-Math.sin(th)*rz));}
+    var pl=poly3(ring);if(pl.length<3)return;
+    ctx.fillStyle=zn.col||'rgba(255,255,255,0.12)';
+    ctx.beginPath();pl.forEach(function(p,i){i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y);});
+    ctx.closePath();ctx.globalAlpha=a*0.22;ctx.fill();
+    ctx.globalAlpha=a*0.8;ctx.lineWidth=1.6;ctx.strokeStyle=zn.col||'#fff';ctx.stroke();
+    ctx.globalAlpha=a;
+  });
+  routes.forEach(function(r){
+    if(quizOn&&focusId&&r.pid===focusId)return;
+    var pts=null;
+    if(r.type==='tree'){
+      if(play==='run')return;
+      var pl2=playerById(r.pid);if(!pl2)return;
+      pts=routePoints(pl2,r.concept,r.stem);
+    }else if(r.type==='route')pts=routePts(r);
+    else if(r.type==='arrow')pts=[{x:r.x1,y:r.y1},{x:r.x2,y:r.y2}];
+    else pts=[{x:r.x1,y:r.y1},{x:(r.x1+r.x2)/2,y:Math.min(r.y1,r.y2)-32},{x:r.x2,y:r.y2}];
+    if(pts&&pts.length>1)ground3(pts,r.col||'#fff',0.34,r.type==='route'?[9,6]:null);
+  });
+  assigns.forEach(function(as){
+    if(play==='run'&&as.phase==='pass')return;
+    if(play==='pass'&&as.phase==='run')return;
+    if(quizOn&&focusId&&as.pid===focusId)return;
+    if(as.shape==='circle')return;
+    var src=playerById(as.pid);if(!src)return;
+    var pts=as.path?as.path.slice():[{x:src.x,y:src.y},{x:as.tx,y:as.ty}];
+    if(as.path)pts.unshift({x:src.x,y:src.y});
+    if(Math.hypot(pts[pts.length-1].x-src.x,pts[pts.length-1].y-src.y)<6)return;
+    ground3(pts,kindColSafe(as.kind),0.30,null);
+  });
+  ctx.restore();
+}
+
+/* --- bodies --- */
+function shade3(hex,k){
+  var h=String(hex).replace('#','');
+  if(h.length===3)h=h[0]+h[0]+h[1]+h[1]+h[2]+h[2];
+  var n=parseInt(h,16);if(isNaN(n))return hex;
+  var r=(n>>16)&255,g=(n>>8)&255,b=n&255;
+  if(k<1){r=Math.round(r*k);g=Math.round(g*k);b=Math.round(b*k);}
+  else{r=Math.round(r+(255-r)*(k-1));g=Math.round(g+(255-g)*(k-1));b=Math.round(b+(255-b)*(k-1));}
+  return 'rgb('+r+','+g+','+b+')';
+}
+function drawBody3(it){
+  var p=it.p,base=proj3(it.c);if(!base)return;
+  var top=pt3(it.w.x,1.90,it.w.z);if(!top)return;
+  var h=base.y-top.y;
+  if(h<2.5||h>H*4)return;
+  // Out of frame. From inside a helmet that happens constantly — at the snap your
+  // X is twenty yards wide and nobody sees him — so an eligible receiver you cannot
+  // see gets a tab on the edge he is on. You know where he is; you just have to turn.
+  if(base.x<-4||base.x>W+4){
+    if(cam3Mode!=='player'||p.color!==O||isOL(p)||p.color===Q)return;
+    if(!routes.some(function(q){return q.type==='tree'&&q.pid===p.id;})&&play==='pass')return;
+    var ex=base.x<0?16:W-16, ey=Math.max(24,Math.min(H-24,base.y-h*0.55));
+    ctx.save();ctx.globalAlpha=0.88;
+    ctx.font='700 '+Math.round(Math.max(10,W/74))+'px '+PFONT;
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    var tw2=ctx.measureText(p.label).width;
+    ctx.fillStyle=p.color;
+    ctx.fillRect(ex-tw2/2-6,ey-11,tw2+12,22);
+    ctx.fillStyle='#fff';ctx.fillText(p.label,ex,ey);
+    ctx.beginPath();                                  // a wedge pointing off the edge
+    var dx2=base.x<0?-1:1;
+    ctx.moveTo(ex+dx2*(tw2/2+7),ey-7);ctx.lineTo(ex+dx2*(tw2/2+15),ey);
+    ctx.lineTo(ex+dx2*(tw2/2+7),ey+7);ctx.closePath();ctx.fillStyle=p.color;ctx.fill();
+    ctx.restore();
+    _proj3.push({id:p.id,x:ex,y:ey+11,h:26,edge:true});
+    return;
+  }
+  var col=p.color, dark=shade3(col,0.60), lid=shade3(col,0.70);
+  // Your own line will blind you from inside a helmet, which is exactly why these
+  // apps ship a see-through option. Anybody right on top of the camera goes sheer.
+  var al=1;
+  if(ghost3&&p.id!==_cam3.who)al=0.40;
+  else if(cam3Mode==='player'&&it.c.z<4.2){
+    if(it.c.z<1.9)return;                      // he is on your face mask; he is not the picture
+    al=Math.min(0.92,(it.c.z-1.9)/2.3);
+  }
+  ctx.save();ctx.globalAlpha=Math.max(0,al);
+  // the shadow is what actually puts him on the grass
+  ctx.fillStyle='rgba(10,20,10,0.28)';
+  ctx.beginPath();ctx.ellipse(base.x,base.y,h*0.155,h*0.045,0,0,Math.PI*2);ctx.fill();
+  // A man is about six and a half helmets tall and a third as wide across the pads.
+  // Get those two ratios right and the silhouette reads as football from any distance.
+  var X=base.x, B=base.y;
+  function Y(f){return B-h*f;}
+  var shW=h*0.165, hipW=h*0.098, ftW=h*0.085, hr=h*0.072;
+  ctx.strokeStyle='rgba(8,14,8,0.55)';ctx.lineWidth=Math.max(0.5,h*0.012);
+  var fine=h>14;
+  // legs
+  ctx.fillStyle=dark;
+  ctx.beginPath();
+  ctx.moveTo(X-ftW,B);ctx.lineTo(X-hipW,Y(0.47));ctx.lineTo(X+hipW,Y(0.47));ctx.lineTo(X+ftW,B);
+  ctx.closePath();ctx.fill();if(fine)ctx.stroke();
+  if(fine){                                   // split the legs so he reads as running
+    ctx.strokeStyle='rgba(8,14,8,0.32)';ctx.beginPath();
+    ctx.moveTo(X,Y(0.42));ctx.lineTo(X,Y(0.04));ctx.stroke();
+    ctx.strokeStyle='rgba(8,14,8,0.55)';
+  }
+  // arms, hanging off the pads
+  ctx.fillStyle=dark;
+  [-1,1].forEach(function(sg){
+    ctx.beginPath();
+    ctx.moveTo(X+sg*shW*0.80,Y(0.78));ctx.lineTo(X+sg*shW*1.06,Y(0.76));
+    ctx.lineTo(X+sg*shW*0.92,Y(0.50));ctx.lineTo(X+sg*shW*0.62,Y(0.52));
+    ctx.closePath();ctx.fill();if(fine)ctx.stroke();
+  });
+  // jersey over the shoulder pads — the square top is the football silhouette
+  ctx.fillStyle=col;
+  ctx.beginPath();
+  ctx.moveTo(X-hipW*1.02,Y(0.46));
+  ctx.lineTo(X-shW*0.92,Y(0.70));
+  ctx.lineTo(X-shW,Y(0.795));
+  ctx.quadraticCurveTo(X-shW*1.02,Y(0.835),X-shW*0.66,Y(0.842));
+  ctx.lineTo(X+shW*0.66,Y(0.842));
+  ctx.quadraticCurveTo(X+shW*1.02,Y(0.835),X+shW,Y(0.795));
+  ctx.lineTo(X+shW*0.92,Y(0.70));
+  ctx.lineTo(X+hipW*1.02,Y(0.46));
+  ctx.closePath();ctx.fill();if(fine)ctx.stroke();
+  if(fine){                                   // the pad seam across the chest
+    ctx.strokeStyle=shade3(col,0.78);ctx.lineWidth=Math.max(0.6,h*0.014);
+    ctx.beginPath();ctx.moveTo(X-shW*0.80,Y(0.745));ctx.lineTo(X+shW*0.80,Y(0.745));ctx.stroke();
+    ctx.strokeStyle='rgba(8,14,8,0.55)';ctx.lineWidth=Math.max(0.5,h*0.012);
+  }
+  // helmet
+  var hy=Y(0.915);
+  ctx.fillStyle=lid;
+  ctx.beginPath();ctx.arc(X,hy,hr,0,Math.PI*2);ctx.fill();if(fine)ctx.stroke();
+  if(fine){
+    ctx.fillStyle='rgba(255,255,255,0.10)';   // a little crown highlight
+    ctx.beginPath();ctx.arc(X-hr*0.30,hy-hr*0.38,hr*0.30,0,Math.PI*2);ctx.fill();
+  }
+  // Facing: the offence plays toward +Z, the defence toward -Z. Looking at his face
+  // you get a mask; behind him you read the back of the jersey.
+  var faceZ=(p.color===D)?-1:1;
+  var camZ=Math.cos(_cam3.yaw)*Math.cos(_cam3.pitch);
+  if((faceZ*camZ)<0&&hr>2.2){
+    ctx.strokeStyle=shade3(col,0.34);ctx.lineWidth=Math.max(0.7,hr*0.20);
+    ctx.beginPath();ctx.moveTo(X-hr*0.78,hy+hr*0.40);ctx.lineTo(X+hr*0.78,hy+hr*0.40);ctx.stroke();
+    ctx.lineWidth=Math.max(0.5,hr*0.13);
+    ctx.beginPath();ctx.moveTo(X,hy+hr*0.18);ctx.lineTo(X,hy+hr*0.62);ctx.stroke();
+  }
+  // his name: on the jersey when there is room for it, on a tab over his head when not
+  var fs=Math.max(6,Math.min(h*0.135,24));
+  ctx.font='700 '+Math.round(fs)+'px '+PFONT;
+  ctx.textAlign='center';ctx.textBaseline='middle';
+  var tw=ctx.measureText(p.label).width;
+  if(h>40&&tw<shW*1.75){
+    ctx.fillStyle='rgba(255,255,255,0.95)';
+    ctx.fillText(p.label,X,Y(0.63));
+  }else if(h>8){
+    var ly=hy-hr-fs*0.80, tabw=tw+fs*0.55, tabh=fs*1.18;
+    ctx.fillStyle='rgba(14,22,16,0.78)';
+    ctx.beginPath();ctx.rect(X-tabw/2,ly-tabh/2,tabw,tabh);ctx.fill();
+    ctx.fillStyle='#fff';ctx.fillText(p.label,X,ly);
+  }
+  ctx.restore();
+  _proj3.push({id:p.id,x:base.x,y:base.y,h:h});
+}
+function draw3Ball(){
+  var bp=animBallPos(animT);
+  var wb,hgt;
+  if(bp){
+    wb=world3(bp.x,bp.y);
+    hgt=1.15;
+    if(bp.flying&&bp.from&&bp.to){
+      var tot=Math.hypot(bp.to.x-bp.from.x,bp.to.y-bp.from.y)||1;
+      var got=Math.hypot(bp.x-bp.from.x,bp.y-bp.from.y);
+      var u=Math.max(0,Math.min(1,got/tot));
+      hgt=1.55+Math.min(6,tot/YD*0.22)*Math.sin(Math.PI*u);
+    }
+  }else{
+    wb=world3(ballX,LOS+Math.round(0.2*YD_V));hgt=0.16;
+  }
+  var cb=camSpace3(wb.x,hgt,wb.z);
+  if(cam3Mode==='player'&&cb.z<2.2)return;        // it is in your own hands
+  var s=proj3(cb);if(!s)return;
+  var sc=Math.max(1.5,Math.min(H*0.06,_cam3.F*0.155/s.z));
+  ctx.save();ctx.translate(s.x,s.y);
+  ctx.fillStyle='#8A4B24';ctx.strokeStyle='rgba(20,12,6,0.7)';ctx.lineWidth=Math.max(0.6,sc*0.16);
+  ctx.beginPath();ctx.ellipse(0,0,sc,sc*0.62,0,0,Math.PI*2);ctx.fill();ctx.stroke();
+  if(sc>4){
+    ctx.strokeStyle='rgba(255,255,255,0.9)';ctx.lineWidth=Math.max(0.7,sc*0.12);
+    ctx.beginPath();ctx.moveTo(-sc*0.32,0);ctx.lineTo(sc*0.32,0);ctx.stroke();
+  }
+  ctx.restore();
+}
+
+/* --- the frame --- */
+function draw3D(){
+  buildCam3();_proj3=[];
+  draw3Field();
+  draw3Art();
+  var list=[];
+  (boxView?players.filter(isBoxPlayer):players).forEach(function(p){
+    if(cam3Mode==='player'&&_cam3.who===p.id)return;      // you cannot see your own helmet
+    var w=world3(px(p),py(p));
+    var c=camSpace3(w.x,0,w.z);
+    if(c.z<0.55)return;
+    list.push({p:p,c:c,w:w});
+  });
+  list.sort(function(a,b){return b.c.z-a.c.z;});           // painter's algorithm
+  list.forEach(drawBody3);
+  draw3Ball();
+  draw3You();
+  draw3RepMark();
+  // who you are looking through
+  var youId=(_cam3.who!=null)?_cam3.who:((rep&&rep.defender)?rep.defender.id:focusId);
+  if(cam3Mode==='player'&&youId!=null){
+    var me=playerById(youId);
+    if(me){
+      ctx.save();
+      ctx.font='700 '+Math.round(Math.max(11,W/62))+'px '+PFONT;
+      ctx.textAlign='left';ctx.textBaseline='top';
+      var lab=(_cam3.who!=null?'THROUGH THE EYES OF ':'YOU ARE THE ')+me.label.toUpperCase();
+      var tw=ctx.measureText(lab).width;
+      ctx.fillStyle='rgba(12,20,14,0.62)';ctx.fillRect(10,10,tw+16,Math.round(W/40));
+      ctx.fillStyle='#fff';ctx.fillText(lab,18,14);
+      ctx.restore();
+    }
+  }
+}
+// mark the man you are playing as, so a kid never has to guess which body is him
+function draw3You(){
+  var id=(rep&&rep.defender)?rep.defender.id:focusId;
+  if(id==null||cam3Mode!=='player'||id===_cam3.who)return;
+  var me=playerById(id);if(!me)return;
+  var w=world3(px(me),py(me)),ring=[];
+  for(var i=0;i<26;i++){var a=i/26*Math.PI*2;
+    ring.push(camSpace3(w.x+Math.cos(a)*1.0,0.03,w.z+Math.sin(a)*1.0));}
+  var pl=poly3(ring);if(pl.length<3)return;
+  ctx.save();
+  ctx.lineWidth=3;ctx.strokeStyle='rgba(255,255,255,0.92)';
+  ctx.beginPath();pl.forEach(function(p,i){i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y);});
+  ctx.closePath();ctx.stroke();
+  ctx.restore();
+}
+// the rep answer, standing up on the grass
+function draw3RepMark(){
+  if(!rep||rep.side!=='def'||rep.phase!=='graded'||!rep.grade||!rep.grade.truth)return;
+  var t=rep.grade.truth,c=rep.choice;
+  var wt=world3(t.x,t.y);
+  if(c&&c.x!=null){
+    var wc=world3(c.x,c.y);
+    ground3([{x:c.x,y:c.y},{x:t.x,y:t.y}],'rgba(255,255,255,0.8)',0.2,[8,6]);
+    var rr=[];
+    for(var i=0;i<20;i++){var th=i/20*Math.PI*2;rr.push(camSpace3(wc.x+Math.cos(th)*0.5,0.04,wc.z+Math.sin(th)*0.5));}
+    var pc=poly3(rr);
+    if(pc.length>2){ctx.fillStyle=RFCOL;ctx.beginPath();
+      pc.forEach(function(p,i){i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y);});ctx.closePath();ctx.fill();}
+  }
+  var ring=[];
+  for(var j=0;j<28;j++){var a=j/28*Math.PI*2;ring.push(camSpace3(wt.x+Math.cos(a)*1.1,0.05,wt.z+Math.sin(a)*1.1));}
+  var pl=poly3(ring);
+  if(pl.length>2){
+    ctx.save();ctx.lineWidth=3;ctx.strokeStyle=CARCOL;
+    ctx.beginPath();pl.forEach(function(p,i){i?ctx.lineTo(p.x,p.y):ctx.moveTo(p.x,p.y);});
+    ctx.closePath();ctx.stroke();ctx.restore();
+  }
+  var lab=pt3(wt.x,1.6,wt.z);
+  if(lab){
+    ctx.save();ctx.font='700 '+Math.round(Math.max(9,W/78))+'px '+PFONT;
+    ctx.textAlign='center';ctx.textBaseline='middle';
+    ctx.lineWidth=3;ctx.strokeStyle='rgba(12,22,17,0.85)';ctx.fillStyle=CARCOL;
+    ctx.strokeText('YOUR SPOT',lab.x,lab.y);ctx.fillText('YOUR SPOT',lab.x,lab.y);
+    ctx.restore();
+  }
+}
+
+/* --- pointing at things in three dimensions --- */
+// Which body is under the finger. A man forty yards downfield is a few pixels wide,
+// and you still have to be able to throw him the ball — so this takes the nearest
+// body to the tap rather than demanding you hit his jersey exactly.
+function hit3(sx,sy,filter){
+  var best=null,bd=1e9;
+  for(var i=0;i<_proj3.length;i++){
+    var b=_proj3[i],pl=playerById(b.id);
+    if(filter&&(!pl||!filter(pl)))continue;
+    var cy=b.y-b.h*0.55,r=Math.max(b.h*0.55,18);
+    var d=Math.hypot(sx-b.x,(sy-cy)*0.8)/r;
+    if(d<1&&d<bd){bd=d;best=b.id;}
+  }
+  return best;
+}
+// where on the grass the finger landed — this is how a defender declares his fit
+function pick3(sx,sy){
+  if(!_cam3)return null;
+  var x=(sx-_cam3.cx)/_cam3.F, y=-(sy-_cam3.cy0)/_cam3.F, z=1;
+  var cp=Math.cos(_cam3.pitch),sp=Math.sin(_cam3.pitch);
+  var dy=y*cp-z*sp, z1=y*sp+z*cp;
+  var cy=Math.cos(_cam3.yaw),sy2=Math.sin(_cam3.yaw);
+  var dx=x*cy+z1*sy2, dz=-x*sy2+z1*cy;
+  if(dy>=-1e-6)return null;                     // that is the sky, not the field
+  var k=-_cam3.y/dy;
+  if(k<=0||k>400)return null;
+  return field3(_cam3.x+dx*k,_cam3.z+dz*k);
+}
+function set3Mode(m){
+  cam3Mode=m;
+  var pre=CAM3[m];
+  if(pre&&m!=='player'){cam3.yaw=pre.yaw;cam3.pitch=pre.pitch;cam3.dist=pre.dist;cam3.auto=true;}
+  cam3.lookYaw=0;cam3.lookPitch=0;
+  var s=document.getElementById('sel-cam3');if(s)s.value=m;
+  render();
+}
+function set3D(on){
+  view3d=!!on;
+  var b=document.getElementById('btn-3d');if(b)b.classList.toggle('act',view3d);
+  var bar=document.getElementById('bar3d');if(bar)bar.hidden=!view3d;
+  render();
+}
+
 /* ================= REPS =================
    A live decision rep, the way a QB trainer works: you get the call, you line up
    against a look you have not seen, the shell rotates after the snap, and a clock
@@ -5122,6 +5792,8 @@ function startRep(side,covOverride){
        clock:REPLEVEL[repLevel].clock,started:0,choice:null,grade:null,truth:null,
        defender:dfn};
   focusId=rep.defender?rep.defender.id:null;
+  if(view3d){cam3Mode='player';cam3.lookYaw=0;cam3.lookPitch=0;
+    var cs=document.getElementById('sel-cam3');if(cs)cs.value='player';}
   setAnim(0);renderRep();
   if(!card)setTimeout(function(){ if(rep&&rep.phase==='presnap')repSnap(); },1500);
 }
